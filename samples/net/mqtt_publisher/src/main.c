@@ -5,166 +5,188 @@
  */
 
 #include <zephyr.h>
+#include <net/socket.h>
 #include <net/mqtt.h>
-
-#include <net/net_context.h>
 
 #include <misc/printk.h>
 #include <string.h>
 #include <errno.h>
 
-#if defined(CONFIG_NET_L2_BLUETOOTH)
+#if defined(CONFIG_NET_L2_BT)
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/conn.h>
-#include <gatt/ipss.h>
 #endif
 
 #include "config.h"
 
-#define CONN_TRIES 20
-
-/* Container for some structures used by the MQTT publisher app. */
-struct mqtt_client_ctx {
-	/**
-	 * The connect message structure is only used during the connect
-	 * stage. Developers must set some msg properties before calling the
-	 * mqtt_tx_connect routine. See below.
-	 */
-	struct mqtt_connect_msg connect_msg;
-	/**
-	 * This is the message that will be received by the server
-	 * (MQTT broker).
-	 */
-	struct mqtt_publish_msg pub_msg;
-
-	/**
-	 * This is the MQTT application context variable.
-	 */
-	struct mqtt_ctx mqtt_ctx;
-
-	/**
-	 * This variable will be passed to the connect callback, declared inside
-	 * the mqtt context struct. If not used, it could be set to NULL.
-	 */
-	void *connect_data;
-
-	/**
-	 * This variable will be passed to the disconnect callback, declared
-	 * inside the mqtt context struct. If not used, it could be set to NULL.
-	 */
-	void *disconnect_data;
-
-	/**
-	 * This variable will be passed to the publish_tx callback, declared
-	 * inside the mqtt context struct. If not used, it could be set to NULL.
-	 */
-	void *publish_data;
-};
-
-/* This is the network context structure. */
-static struct net_context *net_ctx;
+/* Buffers for MQTT client. */
+static u8_t rx_buffer[APP_MQTT_BUFFER_SIZE];
+static u8_t tx_buffer[APP_MQTT_BUFFER_SIZE];
 
 /* The mqtt client struct */
-static struct mqtt_client_ctx client_ctx;
+static struct mqtt_client client_ctx;
+
+/* MQTT Broker details. */
+static struct sockaddr_storage broker;
+
+static struct pollfd fds[1];
+static int nfds;
+
+static bool connected;
 
 /* This routine sets some basic properties for the network context variable */
-static int network_setup(struct net_context **net_ctx, const char *local_addr,
-			 const char *server_addr, u16_t server_port);
+static int network_setup(void);
 
-/* The signature of this routine must match the connect callback declared at
- * the mqtt.h header.
- */
-static void connect_cb(struct mqtt_ctx *mqtt_ctx)
+#if defined(CONFIG_MQTT_LIB_TLS)
+
+#include "test_certs.h"
+
+#define TLS_SNI_HOSTNAME "localhost"
+#define APP_CA_CERT_TAG 1
+#define APP_PSK_TAG 2
+
+static sec_tag_t m_sec_tags[] = {
+#if defined(MBEDTLS_X509_CRT_PARSE_C)
+		APP_CA_CERT_TAG,
+#endif
+#if defined(MBEDTLS_KEY_EXCHANGE__SOME__PSK_ENABLED)
+		APP_PSK_TAG,
+#endif
+};
+
+static int tls_init(void)
 {
-	struct mqtt_client_ctx *client_ctx;
+	int err = -EINVAL;
 
-	client_ctx = CONTAINER_OF(mqtt_ctx, struct mqtt_client_ctx, mqtt_ctx);
+#if defined(MBEDTLS_X509_CRT_PARSE_C)
+	err = tls_credential_add(APP_CA_CERT_TAG, TLS_CREDENTIAL_CA_CERTIFICATE,
+				 ca_certificate, sizeof(ca_certificate));
+	if (err < 0) {
+		NET_ERR("Failed to register public certificate: %d", err);
+		return err;
+	}
+#endif
 
-	printk("[%s:%d]", __func__, __LINE__);
-
-	if (client_ctx->connect_data) {
-		printk(" user_data: %s",
-		       (const char *)client_ctx->connect_data);
+#if defined(MBEDTLS_KEY_EXCHANGE__SOME__PSK_ENABLED)
+	err = tls_credential_add(APP_PSK_TAG, TLS_CREDENTIAL_PSK,
+				 client_psk, sizeof(client_psk));
+	if (err < 0) {
+		NET_ERR("Failed to register PSK: %d", err);
+		return err;
 	}
 
-	printk("\n");
-}
-
-/* The signature of this routine must match the disconnect callback declared at
- * the mqtt.h header.
- */
-static void disconnect_cb(struct mqtt_ctx *mqtt_ctx)
-{
-	struct mqtt_client_ctx *client_ctx;
-
-	client_ctx = CONTAINER_OF(mqtt_ctx, struct mqtt_client_ctx, mqtt_ctx);
-
-	printk("[%s:%d]", __func__, __LINE__);
-
-	if (client_ctx->disconnect_data) {
-		printk(" user_data: %s",
-		       (const char *)client_ctx->disconnect_data);
+	err = tls_credential_add(APP_PSK_TAG, TLS_CREDENTIAL_PSK_ID,
+				 client_psk_id, sizeof(client_psk_id) - 1);
+	if (err < 0) {
+		NET_ERR("Failed to register PSK ID: %d", err);
 	}
+#endif
 
-	printk("\n");
+	return err;
 }
 
-/**
- * The signature of this routine must match the publish_tx callback declared at
- * the mqtt.h header.
- *
- * NOTE: we have two callbacks for MQTT Publish related stuff:
- *	- publish_tx, for publishers
- *	- publish_rx, for subscribers
- *
- * Applications must keep a "message database" with pkt_id's. So far, this is
- * not implemented here. For example, if we receive a PUBREC message with an
- * unknown pkt_id, this routine must return an error, for example -EINVAL or
- * any negative value.
- */
-static int publish_cb(struct mqtt_ctx *mqtt_ctx, u16_t pkt_id,
-		      enum mqtt_packet type)
+#endif /* CONFIG_MQTT_LIB_TLS */
+
+static void prepare_fds(struct mqtt_client *client)
 {
-	struct mqtt_client_ctx *client_ctx;
-	const char *str;
-	int rc = 0;
+	if (client->transport.type == MQTT_TRANSPORT_NON_SECURE) {
+		fds[0].fd = client->transport.tcp.sock;
+	}
+#if defined(CONFIG_MQTT_LIB_TLS)
+	else if (client->transport.type == MQTT_TRANSPORT_SECURE) {
+		fds[0].fd = client->transport.tls.sock;
+	}
+#endif
 
-	client_ctx = CONTAINER_OF(mqtt_ctx, struct mqtt_client_ctx, mqtt_ctx);
+	fds[0].events = ZSOCK_POLLIN;
+	nfds = 1;
+}
 
-	switch (type) {
-	case MQTT_PUBACK:
-		str = "MQTT_PUBACK";
+static void clear_fds(void)
+{
+	nfds = 0;
+}
+
+static void wait(int timeout)
+{
+	if (nfds > 0) {
+		if (poll(fds, nfds, timeout) < 0) {
+			printk("poll error: %d\n", errno);
+		}
+	}
+}
+
+void mqtt_evt_handler(struct mqtt_client *const client,
+		      const struct mqtt_evt *evt)
+{
+	int err;
+
+	switch (evt->type) {
+	case MQTT_EVT_CONNACK:
+		if (evt->result != 0) {
+			printk("MQTT connect failed %d\n", evt->result);
+			break;
+		}
+
+		connected = true;
+		printk("[%s:%d] MQTT client connected!\n", __func__, __LINE__);
+
 		break;
-	case MQTT_PUBCOMP:
-		str = "MQTT_PUBCOMP";
+
+	case MQTT_EVT_DISCONNECT:
+		printk("[%s:%d] MQTT client disconnected %d\n", __func__,
+		       __LINE__, evt->result);
+
+		connected = false;
+		clear_fds();
+
 		break;
-	case MQTT_PUBREC:
-		str = "MQTT_PUBREC";
+
+	case MQTT_EVT_PUBACK:
+		if (evt->result != 0) {
+			printk("MQTT PUBACK error %d\n", evt->result);
+			break;
+		}
+
+		printk("[%s:%d] PUBACK packet id: %u\n", __func__, __LINE__,
+				evt->param.puback.message_id);
+
 		break;
+
+	case MQTT_EVT_PUBREC:
+		if (evt->result != 0) {
+			printk("MQTT PUBREC error %d\n", evt->result);
+			break;
+		}
+
+		printk("[%s:%d] PUBREC packet id: %u\n", __func__, __LINE__,
+		       evt->param.pubrec.message_id);
+
+		const struct mqtt_pubrel_param rel_param = {
+			.message_id = evt->param.pubrec.message_id
+		};
+
+		err = mqtt_publish_qos2_release(client, &rel_param);
+		if (err != 0) {
+			printk("Failed to send MQTT PUBREL: %d\n", err);
+		}
+
+		break;
+
+	case MQTT_EVT_PUBCOMP:
+		if (evt->result != 0) {
+			printk("MQTT PUBCOMP error %d\n", evt->result);
+			break;
+		}
+
+		printk("[%s:%d] PUBCOMP packet id: %u\n", __func__, __LINE__,
+		       evt->param.pubcomp.message_id);
+
+		break;
+
 	default:
-		rc = -EINVAL;
-		str = "Invalid MQTT packet";
+		break;
 	}
-
-	printk("[%s:%d] <%s> packet id: %u", __func__, __LINE__, str, pkt_id);
-
-	if (client_ctx->publish_data) {
-		printk(", user_data: %s",
-		       (const char *)client_ctx->publish_data);
-	}
-
-	printk("\n");
-
-	return rc;
-}
-
-/**
- * The signature of this routine must match the malformed callback declared at
- * the mqtt.h header.
- */
-static void malformed_cb(struct mqtt_ctx *mqtt_ctx, u16_t pkt_type)
-{
-	printk("[%s:%d] pkt_type: %u\n", __func__, __LINE__, pkt_type);
 }
 
 static char *get_mqtt_payload(enum mqtt_qos qos)
@@ -193,169 +215,212 @@ static char *get_mqtt_topic(void)
 #endif
 }
 
-static void prepare_mqtt_publish_msg(struct mqtt_publish_msg *pub_msg,
-				     enum mqtt_qos qos)
+static int publish(struct mqtt_client *client, enum mqtt_qos qos)
 {
-	/* MQTT message payload may be anything, we we use C strings */
-	pub_msg->msg = get_mqtt_payload(qos);
-	/* Payload's length */
-	pub_msg->msg_len = strlen(client_ctx.pub_msg.msg);
-	/* MQTT Quality of Service */
-	pub_msg->qos = qos;
-	/* Message's topic */
-	pub_msg->topic = get_mqtt_topic();
-	pub_msg->topic_len = strlen(client_ctx.pub_msg.topic);
-	/* Packet Identifier, always use different values */
-	pub_msg->pkt_id = sys_rand32_get();
+	struct mqtt_publish_param param;
+
+	param.message.topic.qos = qos;
+	param.message.topic.topic.utf8 = (u8_t *)get_mqtt_topic();
+	param.message.topic.topic.size =
+			strlen(param.message.topic.topic.utf8);
+	param.message.payload.data = get_mqtt_payload(qos);
+	param.message.payload.len =
+			strlen(param.message.payload.data);
+	param.message_id = sys_rand32_get();
+	param.dup_flag = 0;
+	param.retain_flag = 0;
+
+	return mqtt_publish(client, &param);
 }
 
-#define RC_STR(rc)	((rc) == 0 ? "OK" : "ERROR")
+#define RC_STR(rc) ((rc) == 0 ? "OK" : "ERROR")
 
-#define PRINT_RESULT(func, rc)	\
+#define PRINT_RESULT(func, rc) \
 	printk("[%s:%d] %s: %d <%s>\n", __func__, __LINE__, \
 	       (func), rc, RC_STR(rc))
 
-/* In this routine we block until the connected variable is 1 */
-static int try_to_connect(struct mqtt_client_ctx *client_ctx)
+static void broker_init(void)
 {
-	int i = 0;
+#if defined(CONFIG_NET_IPV6)
+	struct sockaddr_in6 *broker6 = (struct sockaddr_in6 *)&broker;
 
-	while (i++ < APP_CONNECT_TRIES && !client_ctx->mqtt_ctx.connected) {
-		int rc;
+	broker6->sin6_family = AF_INET6;
+	broker6->sin6_port = htons(SERVER_PORT);
+	inet_pton(AF_INET6, SERVER_ADDR, &broker6->sin6_addr);
+#else
+	struct sockaddr_in *broker4 = (struct sockaddr_in *)&broker;
 
-		rc = mqtt_tx_connect(&client_ctx->mqtt_ctx,
-				     &client_ctx->connect_msg);
-		k_sleep(APP_SLEEP_MSECS);
-		PRINT_RESULT("mqtt_tx_connect", rc);
+	broker4->sin_family = AF_INET;
+	broker4->sin_port = htons(SERVER_PORT);
+	inet_pton(AF_INET, SERVER_ADDR, &broker4->sin_addr);
+#endif
+}
+
+static void client_init(struct mqtt_client *client)
+{
+	mqtt_client_init(client);
+
+	broker_init();
+
+	/* MQTT client configuration */
+	client->broker = &broker;
+	client->evt_cb = mqtt_evt_handler;
+	client->client_id.utf8 = (u8_t *)MQTT_CLIENTID;
+	client->client_id.size = strlen(MQTT_CLIENTID);
+	client->password = NULL;
+	client->user_name = NULL;
+	client->protocol_version = MQTT_VERSION_3_1_1;
+
+	/* MQTT buffers configuration */
+	client->rx_buf = rx_buffer;
+	client->rx_buf_size = sizeof(rx_buffer);
+	client->tx_buf = tx_buffer;
+	client->tx_buf_size = sizeof(tx_buffer);
+
+	/* MQTT transport configuration */
+#if defined(CONFIG_MQTT_LIB_TLS)
+	client->transport.type = MQTT_TRANSPORT_SECURE;
+
+	struct mqtt_sec_config *tls_config = &client->transport.tls.config;
+
+	tls_config->peer_verify = 2;
+	tls_config->cipher_list = NULL;
+	tls_config->seg_tag_list = m_sec_tags;
+	tls_config->sec_tag_count = ARRAY_SIZE(m_sec_tags);
+#if defined(MBEDTLS_X509_CRT_PARSE_C)
+	tls_config->hostname = TLS_SNI_HOSTNAME;
+#else
+	tls_config->hostname = NULL;
+#endif
+
+#else
+	client->transport.type = MQTT_TRANSPORT_NON_SECURE;
+#endif
+}
+
+/* In this routine we block until the connected variable is 1 */
+static int try_to_connect(struct mqtt_client *client)
+{
+	int rc, i = 0;
+
+	while (i++ < APP_CONNECT_TRIES && !connected) {
+
+		client_init(client);
+
+		rc = mqtt_connect(client);
 		if (rc != 0) {
+			PRINT_RESULT("mqtt_connect", rc);
+			k_sleep(APP_SLEEP_MSECS);
 			continue;
+		}
+
+		prepare_fds(client);
+
+		wait(APP_SLEEP_MSECS);
+		mqtt_input(client);
+
+		if (!connected) {
+			mqtt_abort(client);
 		}
 	}
 
-	if (client_ctx->mqtt_ctx.connected) {
+	if (connected) {
 		return 0;
 	}
 
 	return -EINVAL;
 }
 
+static int process_mqtt_and_sleep(struct mqtt_client *client, int timeout)
+{
+	s64_t remaining = timeout;
+	s64_t start_time = k_uptime_get();
+	int rc;
+
+	while (remaining > 0 && connected) {
+		wait(remaining);
+
+		rc = mqtt_live(client);
+		if (rc != 0) {
+			PRINT_RESULT("mqtt_live", rc);
+			return rc;
+		}
+
+		rc = mqtt_input(client);
+		if (rc != 0) {
+			PRINT_RESULT("mqtt_input", rc);
+			return rc;
+		}
+
+		remaining = timeout + start_time - k_uptime_get();
+	}
+
+	return 0;
+}
+
+#define SUCCESS_OR_EXIT(rc) { if (rc != 0) { return; } }
+#define SUCCESS_OR_BREAK(rc) { if (rc != 0) { break; } }
+
 static void publisher(void)
 {
 	int i, rc;
 
-	/* The net_ctx variable must be ready BEFORE passing it to the MQTT API.
-	 */
-	for (i = 0; i < CONN_TRIES; i++) {
-		rc = network_setup(&net_ctx, ZEPHYR_ADDR, SERVER_ADDR,
-				   SERVER_PORT);
-		if (!rc) {
-			goto connected;
-		}
-	}
+#if defined(CONFIG_MQTT_LIB_TLS)
+	rc = tls_init();
+	PRINT_RESULT("tls_init", rc);
+	SUCCESS_OR_EXIT(rc);
+#endif
 
+	rc = network_setup();
 	PRINT_RESULT("network_setup", rc);
-	goto exit_app;
-
-connected:
-	/* Set everything to 0 and later just assign the required fields. */
-	memset(&client_ctx, 0x00, sizeof(client_ctx));
-
-	/* The network context is the only field that must be set BEFORE
-	 * calling the mqtt_init routine.
-	 */
-	client_ctx.mqtt_ctx.net_ctx = net_ctx;
-
-	/* connect, disconnect and malformed may be set to NULL */
-	client_ctx.mqtt_ctx.connect = connect_cb;
-
-	client_ctx.mqtt_ctx.disconnect = disconnect_cb;
-	client_ctx.mqtt_ctx.malformed = malformed_cb;
-
-	client_ctx.mqtt_ctx.net_timeout = APP_TX_RX_TIMEOUT;
-
-	/* Publisher apps TX the MQTT PUBLISH msg */
-	client_ctx.mqtt_ctx.publish_tx = publish_cb;
-
-	rc = mqtt_init(&client_ctx.mqtt_ctx, MQTT_APP_PUBLISHER);
-	PRINT_RESULT("mqtt_init", rc);
-	if (rc != 0) {
-		goto exit_app;
-	}
-
-	/* The connect message will be sent to the MQTT server (broker).
-	 * If clean_session here is 0, the mqtt_ctx clean_session variable
-	 * will be set to 0 also. Please don't do that, set always to 1.
-	 * Clean session = 0 is not yet supported.
-	 */
-	client_ctx.connect_msg.client_id = MQTT_CLIENTID;
-	client_ctx.connect_msg.client_id_len = strlen(MQTT_CLIENTID);
-	client_ctx.connect_msg.clean_session = 1;
-
-	client_ctx.connect_data = "CONNECTED";
-	client_ctx.disconnect_data = "DISCONNECTED";
-	client_ctx.publish_data = "PUBLISH";
+	SUCCESS_OR_EXIT(rc);
 
 	rc = try_to_connect(&client_ctx);
 	PRINT_RESULT("try_to_connect", rc);
-	if (rc != 0) {
-		goto exit_app;
-	}
+	SUCCESS_OR_EXIT(rc);
 
 	i = 0;
-	while (i++ < APP_MAX_ITERATIONS) {
-		rc = mqtt_tx_pingreq(&client_ctx.mqtt_ctx);
-		k_sleep(APP_SLEEP_MSECS);
-		PRINT_RESULT("mqtt_tx_pingreq", rc);
+	while (i++ < APP_MAX_ITERATIONS && connected) {
+		rc = mqtt_ping(&client_ctx);
+		PRINT_RESULT("mqtt_ping", rc);
+		SUCCESS_OR_BREAK(rc);
 
-		prepare_mqtt_publish_msg(&client_ctx.pub_msg, MQTT_QoS0);
-		rc = mqtt_tx_publish(&client_ctx.mqtt_ctx, &client_ctx.pub_msg);
-		k_sleep(APP_SLEEP_MSECS);
-		PRINT_RESULT("mqtt_tx_publish", rc);
+		rc = process_mqtt_and_sleep(&client_ctx, APP_SLEEP_MSECS);
+		SUCCESS_OR_BREAK(rc);
 
-		prepare_mqtt_publish_msg(&client_ctx.pub_msg, MQTT_QoS1);
-		rc = mqtt_tx_publish(&client_ctx.mqtt_ctx, &client_ctx.pub_msg);
-		k_sleep(APP_SLEEP_MSECS);
-		PRINT_RESULT("mqtt_tx_publish", rc);
+		rc = publish(&client_ctx, MQTT_QOS_0_AT_MOST_ONCE);
+		PRINT_RESULT("mqtt_publish", rc);
+		SUCCESS_OR_BREAK(rc);
 
-		prepare_mqtt_publish_msg(&client_ctx.pub_msg, MQTT_QoS2);
-		rc = mqtt_tx_publish(&client_ctx.mqtt_ctx, &client_ctx.pub_msg);
-		k_sleep(APP_SLEEP_MSECS);
-		PRINT_RESULT("mqtt_tx_publish", rc);
+		rc = process_mqtt_and_sleep(&client_ctx, APP_SLEEP_MSECS);
+		SUCCESS_OR_BREAK(rc);
+
+		rc = publish(&client_ctx, MQTT_QOS_1_AT_LEAST_ONCE);
+		PRINT_RESULT("mqtt_publish", rc);
+		SUCCESS_OR_BREAK(rc);
+
+		rc = process_mqtt_and_sleep(&client_ctx, APP_SLEEP_MSECS);
+		SUCCESS_OR_BREAK(rc);
+
+		rc = publish(&client_ctx, MQTT_QOS_2_EXACTLY_ONCE);
+		PRINT_RESULT("mqtt_publish", rc);
+		SUCCESS_OR_BREAK(rc);
+
+		rc = process_mqtt_and_sleep(&client_ctx, APP_SLEEP_MSECS);
+		SUCCESS_OR_BREAK(rc);
 	}
 
-	rc = mqtt_tx_disconnect(&client_ctx.mqtt_ctx);
-	PRINT_RESULT("mqtt_tx_disconnect", rc);
+	rc = mqtt_disconnect(&client_ctx);
+	PRINT_RESULT("mqtt_disconnect", rc);
 
-exit_app:
-	net_context_put(net_ctx);
+	wait(APP_SLEEP_MSECS);
+	rc = mqtt_input(&client_ctx);
+	PRINT_RESULT("mqtt_input", rc);
+
 	printk("\nBye!\n");
 }
 
-static int set_addr(struct sockaddr *sock_addr, const char *addr, u16_t port)
-{
-	void *ptr;
-	int rc;
-
-#ifdef CONFIG_NET_IPV6
-	net_sin6(sock_addr)->sin6_port = htons(port);
-	sock_addr->family = AF_INET6;
-	ptr = &(net_sin6(sock_addr)->sin6_addr);
-	rc = net_addr_pton(AF_INET6, addr, ptr);
-#else
-	net_sin(sock_addr)->sin_port = htons(port);
-	sock_addr->family = AF_INET;
-	ptr = &(net_sin(sock_addr)->sin_addr);
-	rc = net_addr_pton(AF_INET, addr, ptr);
-#endif
-
-	if (rc) {
-		printk("Invalid IP address: %s\n", addr);
-	}
-
-	return rc;
-}
-
-#if defined(CONFIG_NET_L2_BLUETOOTH)
+#if defined(CONFIG_NET_L2_BT)
 static bool bt_connected;
 
 static
@@ -378,24 +443,12 @@ struct bt_conn_cb bt_conn_cb = {
 };
 #endif
 
-static int network_setup(struct net_context **net_ctx, const char *local_addr,
-			 const char *server_addr, u16_t server_port)
+static int network_setup(void)
 {
-#ifdef CONFIG_NET_IPV6
-	socklen_t addr_len = sizeof(struct sockaddr_in6);
-	sa_family_t family = AF_INET6;
-
-#else
-	socklen_t addr_len = sizeof(struct sockaddr_in);
-	sa_family_t family = AF_INET;
-#endif
-	struct sockaddr server_sock, local_sock;
-	void *p;
-	int rc;
-
-#if defined(CONFIG_NET_L2_BLUETOOTH)
+#if defined(CONFIG_NET_L2_BT)
 	const char *progress_mark = "/-\\|";
 	int i = 0;
+	int rc;
 
 	rc = bt_enable(NULL);
 	if (rc) {
@@ -403,13 +456,7 @@ static int network_setup(struct net_context **net_ctx, const char *local_addr,
 		return rc;
 	}
 
-	ipss_init();
 	bt_conn_cb_register(&bt_conn_cb);
-	rc = ipss_advertise();
-	if (rc) {
-		printk("advertising failed to start\n");
-		return rc;
-	}
 
 	printk("\nwaiting for bt connection: ");
 	while (bt_connected == false) {
@@ -420,57 +467,7 @@ static int network_setup(struct net_context **net_ctx, const char *local_addr,
 	printk("\n");
 #endif
 
-	rc = set_addr(&local_sock, local_addr, 0);
-	if (rc) {
-		printk("set_addr (local) error\n");
-		return rc;
-	}
-
-#ifdef CONFIG_NET_IPV6
-	p = net_if_ipv6_addr_add(net_if_get_default(),
-				 &net_sin6(&local_sock)->sin6_addr,
-				 NET_ADDR_MANUAL, 0);
-#else
-	p = net_if_ipv4_addr_add(net_if_get_default(),
-				 &net_sin(&local_sock)->sin_addr,
-				 NET_ADDR_MANUAL, 0);
-#endif
-
-	if (!p) {
-		return -EINVAL;
-	}
-
-	rc = net_context_get(family, SOCK_STREAM, IPPROTO_TCP, net_ctx);
-	if (rc) {
-		printk("net_context_get error\n");
-		return rc;
-	}
-
-	rc = net_context_bind(*net_ctx, &local_sock, addr_len);
-	if (rc) {
-		printk("net_context_bind error\n");
-		goto lb_exit;
-	}
-
-	rc = set_addr(&server_sock, server_addr, server_port);
-	if (rc) {
-		printk("set_addr (server) error\n");
-		goto lb_exit;
-	}
-
-	rc = net_context_connect(*net_ctx, &server_sock, addr_len, NULL,
-				 APP_SLEEP_MSECS, NULL);
-	if (rc) {
-		printk("net_context_connect error\n");
-		goto lb_exit;
-	}
-
 	return 0;
-
-lb_exit:
-	net_context_put(*net_ctx);
-
-	return rc;
 }
 
 void main(void)

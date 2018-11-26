@@ -41,8 +41,10 @@
  * pci_bus_scan_init();
  *
  * while (pci_bus_scan(&info)) {
- *      // do something with "info" which holds a valid result, i.e. some
- *      // device information matching the PCI class PCI_CLASS_COMM_CTLR
+ *      ...
+ *      do something with "info" which holds a valid result, i.e. some
+ *      device information matching the PCI class PCI_CLASS_COMM_CTLR
+ *      ...
  * }
  *
  * INTERNALS
@@ -75,7 +77,7 @@
 #include <toolchain.h>
 #include <linker/sections.h>
 
-#include <board.h>
+#include <soc.h>
 
 #include <pci/pci_mgr.h>
 #include <pci/pci.h>
@@ -458,8 +460,7 @@ void pci_enable_bus_master(struct pci_dev_info *dev_info)
 
 void pci_show(struct pci_dev_info *dev_info)
 {
-	printk("PCI device:\n");
-	printk("%u:%u %X:%X class: 0x%X, %u, %u, %s,"
+	printk("%u:%u %X:%X class: 0x%X, %u, %u, %s, "
 		"addrs: 0x%X-0x%X, IRQ %d\n",
 		dev_info->bus,
 		dev_info->dev,

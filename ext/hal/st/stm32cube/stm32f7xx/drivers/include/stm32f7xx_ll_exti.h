@@ -2,13 +2,11 @@
   ******************************************************************************
   * @file    stm32f7xx_ll_exti.h
   * @author  MCD Application Team
-  * @version V1.2.0
-  * @date    30-December-2016
   * @brief   Header file of EXTI LL module.
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; COPYRIGHT(c) 2016 STMicroelectronics</center></h2>
+  * <h2><center>&copy; COPYRIGHT(c) 2017 STMicroelectronics</center></h2>
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -123,11 +121,15 @@ typedef struct
 #endif
 #define LL_EXTI_LINE_17                EXTI_IMR_IM17          /*!< Extended line 17 */
 #if defined(EXTI_IMR_IM18)
+#ifndef LL_EXTI_LINE_18
 #define LL_EXTI_LINE_18                EXTI_IMR_IM18          /*!< Extended line 18 */
+#endif
 #endif
 #define LL_EXTI_LINE_19                EXTI_IMR_IM19          /*!< Extended line 19 */
 #if defined(EXTI_IMR_IM20)
+#ifndef LL_EXTI_LINE_20
 #define LL_EXTI_LINE_20                EXTI_IMR_IM20          /*!< Extended line 20 */
+#endif
 #endif
 #if defined(EXTI_IMR_IM21)
 #define LL_EXTI_LINE_21                EXTI_IMR_IM21          /*!< Extended line 21 */

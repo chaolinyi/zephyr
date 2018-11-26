@@ -18,7 +18,10 @@ the STMicroelectronics STM32F407ZG ARM Cortex-M4 CPU.
 
      OLIMEX-STM32-E407
 
-More information about the board can be found at the
+Hardware
+********
+
+Information about the board can be found at the
 `OLIMEX-STM32-E407 website`_ and `OLIMEX-STM32-E407 user manual`_.
 The `ST STM32F407ZG Datasheet`_ contains the processor's
 information and the datasheet.
@@ -130,7 +133,7 @@ CON1 power
 +-------+--------------+-------------------------+
 | Pin   | Signal Name  | STM32F407 Pin#          |
 +=======+==============+=========================+
-| RST   | RESET        | 23                      |
+| RST   | RESET        | 25                      |
 +-------+--------------+-------------------------+
 | 3V3   | VCC (3V3)    | N/A                     |
 +-------+--------------+-------------------------+
@@ -318,31 +321,28 @@ is 12 MHz. The processor can setup HSE to drive the master clock,
 which can be set as high as 168 MHz.
 
 Programming and Debugging
-=========================
+*************************
 The OLIMEX-STM32-E407 board does not include an embedded debug tool
 interface. You will need to use ST tools or an external JTAG probe.
 In the following examples a ST-Link V2 USB dongle is used.
 
-Flashing an application to STM32F4DISCOVERY
--------------------------------------------
+If you have an external JTAG probe compliant with the default Zephyr OpenOCD
+configuration, however, then applications for the ``olimex_stm32_e407`` board
+configuration can be built and flashed in the usual way (see
+:ref:`build_an_application` and :ref:`application_run` for more details).
 
-The sample application :ref:`hello_world` is being used in this tutorial. To
-build the Zephyr kernel and application, enter:
-
-.. code-block:: console
-
-   $ cd <zephyr_root_path>
-   $ source zephyr-env.sh
-   $ cd $ZEPHYR_BASE/samples/hello_world/
-   $ make BOARD=olimex_stm32_e407
+Flashing an application to the Olimex-STM32-E407
+================================================
 
 Connect the ST-Link USB dongle to your host computer and to the JTAG port of
-the OLIMEX-STM32-E407 board.
-Then, enter the following command:
+the OLIMEX-STM32-E407 board. Then build and flash an application.
 
-.. code-block:: console
+Here is an example for the :ref:`hello_world` application.
 
-   $ make BOARD=olimex_stm32_e407 flash
+.. zephyr-app-commands::
+   :zephyr-app: samples/hello_world
+   :board: olimex_stm32_e407
+   :goals: build flash
 
 Run a serial host program to connect with your board:
 
@@ -350,22 +350,24 @@ Run a serial host program to connect with your board:
 
    $ minicom -D /dev/ttyACM0
 
-You should see the following message:
+After resetting the board, you should see the following message:
 
 .. code-block:: console
 
-   ***** BOOTING ZEPHYR OS v1.7.99 - BUILD: May 29 2017 22:31:53 *****
+   ***** BOOTING ZEPHYR OS v1.8.99 - BUILD: May 29 2017 22:31:53 *****
    Hello World! arm
 
 Debugging
 =========
 
-Access gdb with the following make command:
+Provided that you have a JTAG probe, you can debug an application in the usual
+way.  Here is an example for the :ref:`hello_world` application.
 
-.. code-block:: console
-
-   $ make BOARD=olimex_stm32_e407 debug
-
+.. zephyr-app-commands::
+   :zephyr-app: samples/hello_world
+   :board: olimex_stm32_e407
+   :maybe-skip-config:
+   :goals: debug
 
 .. _OLIMEX-STM32-E407 website:
    https://www.olimex.com/Products/ARM/ST/STM32-E407/open-source-hardware

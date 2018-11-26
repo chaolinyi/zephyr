@@ -15,6 +15,23 @@ While every LineRule can be implemented as a CommitRule, it's usually easier and
 that fits your needs.
 """
 
+class BodyMinLineCount(CommitRule):
+    # A rule MUST have a human friendly name
+    name = "body-min-line-count"
+
+    # A rule MUST have an *unique* id, we recommend starting with UC (for User-defined Commit-rule).
+    id = "UC6"
+
+    # A rule MAY have an option_spec if its behavior should be configurable.
+    options_spec = [IntOption('min-line-count', 2, "Minimum body line count excluding Signed-off-by")]
+
+    def validate(self, commit):
+        filtered = [x for x in commit.message.body if not x.lower().startswith("signed-off-by") and x != '']
+        line_count = len(filtered)
+        min_line_count = self.options['min-line-count'].value
+        if line_count < min_line_count:
+            message = "Body has no content, should at least have {} line.".format(min_line_count)
+            return [RuleViolation(self.id, message, line_nr=1)]
 
 class BodyMaxLineCount(CommitRule):
     # A rule MUST have a human friendly name
@@ -49,12 +66,23 @@ class SignedOffBy(CommitRule):
         flags |= re.IGNORECASE
         for line in commit.message.body:
             if line.lower().startswith("signed-off-by"):
-                if not re.search('(^)Signed-off-by: ([-\w.]+) ([-\w.]+) (.*)', line, flags=flags):
+                if not re.search('(^)Signed-off-by: ([-\'\w.]+) ([-\'\w.]+) (.*)', line, flags=flags):
                     return [RuleViolation(self.id, "Signed-off-by: must have a full name", line_nr=1)]
                 else:
                     return
         return [RuleViolation(self.id, "Body does not contain a 'Signed-Off-By' line", line_nr=1)]
 
+class TitleMaxLengthRevert(LineRule):
+    name = "title-max-length-no-revert"
+    id = "UC5"
+    target = CommitMessageTitle
+    options_spec = [IntOption('line-length', 72, "Max line length")]
+    violation_message = "Title exceeds max length ({0}>{1})"
+
+    def validate(self, line, _commit):
+        max_length = self.options['line-length'].value
+        if len(line) > max_length and not line.startswith("Revert"):
+            return [RuleViolation(self.id, self.violation_message.format(len(line), max_length), line)]
 
 class TitleStartsWithSubsystem(LineRule):
     name = "title-starts-with-subsystem"
@@ -65,7 +93,7 @@ class TitleStartsWithSubsystem(LineRule):
     def validate(self, title, _commit):
         regex = self.options['regex'].value
         pattern = re.compile(regex, re.UNICODE)
-        violation_message = "Title does not follow <subsystem>: <subject>"
+        violation_message = "Title does not follow [subsystem]: [subject]"
         if not pattern.search(title):
             return [RuleViolation(self.id, violation_message, title)]
 
@@ -78,5 +106,12 @@ class MaxLineLengthExceptions(LineRule):
 
     def validate(self, line, _commit):
         max_length = self.options['line-length'].value
-        if len(line) > max_length and not line.startswith('Signed-off-by'):
+        urls = re.findall('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', line)
+        if line.startswith('Signed-off-by'):
+            return
+
+        if len(urls) > 0:
+            return
+
+        if len(line) > max_length:
             return [RuleViolation(self.id, self.violation_message.format(len(line), max_length), line)]

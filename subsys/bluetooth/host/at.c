@@ -49,7 +49,9 @@ int at_get_number(struct at_client *at, u32_t *val)
 
 	skip_space(at);
 
-	for (i = 0, *val = 0; isdigit(at->buf[at->pos]); at->pos++, i++) {
+	for (i = 0, *val = 0;
+	     isdigit((unsigned char)at->buf[at->pos]);
+	     at->pos++, i++) {
 		*val = *val * 10 + at->buf[at->pos] - '0';
 	}
 
@@ -92,7 +94,7 @@ static int get_cmd_value(struct at_client *at, struct net_buf *buf,
 {
 	int cmd_len = 0;
 	u8_t pos = at->pos;
-	const unsigned char *str = buf->data;
+	const char *str = (char *)buf->data;
 
 	while (cmd_len < buf->len && at->pos != at->buf_max_len) {
 		if (*str != stop_byte) {
@@ -122,7 +124,7 @@ static int get_response_string(struct at_client *at, struct net_buf *buf,
 {
 	int cmd_len = 0;
 	u8_t pos = at->pos;
-	const unsigned char *str = buf->data;
+	const char *str = (char *)buf->data;
 
 	while (cmd_len < buf->len && at->pos != at->buf_max_len) {
 		if (*str != stop_byte) {
@@ -149,7 +151,7 @@ static int get_response_string(struct at_client *at, struct net_buf *buf,
 
 static void reset_buffer(struct at_client *at)
 {
-	memset(at->buf, 0, at->buf_max_len);
+	(void)memset(at->buf, 0, at->buf_max_len);
 	at->pos = 0;
 }
 
@@ -505,7 +507,7 @@ int at_list_get_range(struct at_client *at, u32_t *min, u32_t *max)
 		goto out;
 	}
 
-	if (!isdigit(at->buf[at->pos])) {
+	if (!isdigit((unsigned char)at->buf[at->pos])) {
 		return -ENODATA;
 	}
 out:

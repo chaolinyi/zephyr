@@ -11,22 +11,6 @@
 /* Print extra info about received TLS data */
 #define RX_EXTRA_DEBUG 0
 
-#if defined(MBEDTLS_DEBUG_C)
-#include <mbedtls/debug.h>
-/* - Debug levels (from ext/lib/crypto/mbedtls/include/mbedtls/debug.h)
- *    - 0 No debug
- *    - 1 Error
- *    - 2 State change
- *    - 3 Informational
- *    - 4 Verbose
- */
-#if defined(CONFIG_NET_DEBUG_APP_TLS_LEVEL)
-#define DEBUG_THRESHOLD CONFIG_NET_DEBUG_APP_TLS_LEVEL
-#else
-#define DEBUG_THRESHOLD 0
-#endif /* CONFIG_NET_DEBUG_APP_TLS_LEVEL */
-#endif
-
 #if defined(MBEDTLS_MEMORY_BUFFER_ALLOC_C)
 #include <mbedtls/memory_buffer_alloc.h>
 #endif
@@ -38,7 +22,7 @@
 									\
 		mbedtls_strerror(ret, error, sizeof(error));		\
 									\
-		NET_ERR(fmt " (%s)", -ret, error);			\
+		NET_ERR(fmt " (%s)", -ret, log_strdup(error));		\
 	} while (0)
 #else
 #define _net_app_print_error(fmt, ret) NET_ERR(fmt, -ret)
@@ -53,11 +37,7 @@ enum _net_app_dir {
 
 #define BUF_ALLOC_TIMEOUT 100
 
-#if defined(CONFIG_NET_DEBUG_APP)
 void _net_app_print_info(struct net_app_ctx *ctx);
-#else
-#define _net_app_print_info(...)
-#endif /* CONFIG_NET_DEBUG_APP */
 
 #if defined(CONFIG_NET_APP_SERVER) || defined(CONFIG_NET_APP_CLIENT)
 char *_net_app_sprint_ipaddr(char *buf, int buflen,
@@ -66,8 +46,8 @@ void _net_app_received(struct net_context *net_ctx,
 		       struct net_pkt *pkt,
 		       int status,
 		       void *user_data);
-int _net_app_set_local_addr(struct sockaddr *addr, const char *myaddr,
-			    u16_t port);
+int _net_app_set_local_addr(struct net_app_ctx *ctx, struct sockaddr *addr,
+			    const char *myaddr, u16_t port);
 int _net_app_set_net_ctx(struct net_app_ctx *ctx,
 			 struct net_context *net_ctx,
 			 struct sockaddr *addr,
@@ -77,7 +57,19 @@ int _net_app_config_local_ctx(struct net_app_ctx *ctx,
 			      enum net_sock_type sock_type,
 			      enum net_ip_protocol proto,
 			      struct sockaddr *addr);
-struct net_context *_net_app_select_net_ctx(struct net_app_ctx *ctx);
+
+#if NET_LOG_LEVEL > 0
+struct net_context *_net_app_select_net_ctx_debug(struct net_app_ctx *ctx,
+						  const struct sockaddr *dst,
+						  const char *caller,
+						  int line);
+#define _net_app_select_net_ctx(ctx, dst)				\
+	_net_app_select_net_ctx_debug(ctx, dst, __func__, __LINE__)
+#else
+struct net_context *_net_app_select_net_ctx(struct net_app_ctx *ctx,
+					    const struct sockaddr *dst);
+#endif
+
 int _net_app_ssl_mux(void *context, unsigned char *buf, size_t size);
 int _net_app_tls_sendto(struct net_pkt *pkt,
 			const struct sockaddr *dst_addr,
@@ -91,6 +83,7 @@ void _net_app_tls_received(struct net_context *context,
 			   int status,
 			   void *user_data);
 int _net_app_ssl_mainloop(struct net_app_ctx *ctx);
+int _net_app_tls_trigger_close(struct net_app_ctx *ctx);
 
 #if defined(CONFIG_NET_APP_SERVER)
 void _net_app_accept_cb(struct net_context *net_ctx,
@@ -102,12 +95,24 @@ void _net_app_accept_cb(struct net_context *net_ctx,
 #if defined(CONFIG_NET_APP_CLIENT)
 #endif /* CONFIG_NET_APP_CLIENT */
 
-#if defined(CONFIG_NET_APP_TLS)
+#if defined(CONFIG_NET_APP_TLS) || defined(CONFIG_NET_APP_DTLS)
+bool _net_app_server_tls_enable(struct net_app_ctx *ctx);
+bool _net_app_server_tls_disable(struct net_app_ctx *ctx);
 void _net_app_tls_handler_stop(struct net_app_ctx *ctx);
 int _net_app_tls_init(struct net_app_ctx *ctx, int client_or_server);
 int _net_app_entropy_source(void *data, unsigned char *output, size_t len,
 			    size_t *olen);
 int _net_app_ssl_tx(void *context, const unsigned char *buf, size_t size);
-#endif /* CONFIG_NET_APP_TLS */
+#endif /* CONFIG_NET_APP_TLS || CONFIG_NET_APP_DTLS */
+
+#if defined(CONFIG_NET_APP_DTLS)
+#include "../../ip/connection.h"
+enum net_verdict _net_app_dtls_established(struct net_conn *conn,
+					   struct net_pkt *pkt,
+					   void *user_data);
+#endif /* CONFIG_NET_APP_DTLS */
+
+void _net_app_register(struct net_app_ctx *ctx);
+void _net_app_unregister(struct net_app_ctx *ctx);
 
 #endif /* CONFIG_NET_APP_SERVER || CONFIG_NET_APP_CLIENT */

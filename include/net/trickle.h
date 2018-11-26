@@ -10,8 +10,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef __TRICKLE_H
-#define __TRICKLE_H
+#ifndef ZEPHYR_INCLUDE_NET_TRICKLE_H_
+#define ZEPHYR_INCLUDE_NET_TRICKLE_H_
 
 #include <stdbool.h>
 #include <zephyr/types.h>
@@ -22,6 +22,13 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @brief Trickle algorithm library
+ * @defgroup trickle Trickle Algorithm Library
+ * @ingroup networking
+ * @{
+ */
 
 struct net_trickle;
 
@@ -36,13 +43,13 @@ typedef void (*net_trickle_cb_t)(struct net_trickle *trickle,
 struct net_trickle {
 	u32_t Imin;		/* Min interval size in ms */
 	u8_t Imax;		/* Max number of doublings */
-	u8_t k;		/* Redundancy constant */
+	u8_t k;			/* Redundancy constant */
 
 	u32_t I;		/* Current interval size */
-	u32_t Istart;	/* Start of the interval in ms */
-	u8_t c;		/* Consistency counter */
+	u32_t Istart;		/* Start of the interval in ms */
+	u8_t c;			/* Consistency counter */
 
-	u32_t Imax_abs;	/* Max interval size in ms (not doublings)
+	u32_t Imax_abs;		/* Max interval size in ms (not doublings)
 				 */
 
 	struct k_delayed_work timer;
@@ -120,8 +127,12 @@ static inline bool net_trickle_is_running(struct net_trickle *trickle)
 	return trickle->I != 0;
 }
 
+/**
+ * @}
+ */
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __TRICKLE_H */
+#endif /* ZEPHYR_INCLUDE_NET_TRICKLE_H_ */

@@ -117,7 +117,7 @@ static int gpio_qmsi_device_ctrl(struct device *port, u32_t ctrl_command,
 }
 #endif
 
-DEVICE_DEFINE(gpio_0, CONFIG_GPIO_QMSI_0_NAME, &gpio_qmsi_init,
+DEVICE_DEFINE(gpio_0, DT_GPIO_QMSI_0_NAME, &gpio_qmsi_init,
 	      gpio_qmsi_device_ctrl, &gpio_0_runtime, &gpio_0_config,
 	      POST_KERNEL, CONFIG_GPIO_QMSI_INIT_PRIORITY, NULL);
 
@@ -154,7 +154,7 @@ static int gpio_aon_device_ctrl(struct device *port, u32_t ctrl_command,
 }
 #endif
 
-DEVICE_DEFINE(gpio_aon, CONFIG_GPIO_QMSI_1_NAME, &gpio_qmsi_init,
+DEVICE_DEFINE(gpio_aon, DT_GPIO_QMSI_1_NAME, &gpio_qmsi_init,
 	      gpio_aon_device_ctrl, &gpio_aon_runtime, &gpio_aon_config,
 	      POST_KERNEL, CONFIG_GPIO_QMSI_INIT_PRIORITY, NULL);
 
@@ -369,8 +369,7 @@ static int gpio_qmsi_init(struct device *port)
 	const struct gpio_qmsi_config *gpio_config = port->config->config_info;
 
 	if (IS_ENABLED(CONFIG_GPIO_QMSI_API_REENTRANCY)) {
-		k_sem_init(RP_GET(port), 0, UINT_MAX);
-		k_sem_give(RP_GET(port));
+		k_sem_init(RP_GET(port), 1, UINT_MAX);
 	}
 
 	switch (gpio_config->gpio) {
@@ -379,18 +378,18 @@ static int gpio_qmsi_init(struct device *port)
 				  CLK_PERIPH_GPIO_INTERRUPT |
 				  CLK_PERIPH_GPIO_DB |
 				  CLK_PERIPH_CLK);
-		IRQ_CONNECT(IRQ_GET_NUMBER(QM_IRQ_GPIO_0_INT),
+		IRQ_CONNECT(DT_GPIO_QMSI_0_IRQ,
 			    CONFIG_GPIO_QMSI_0_IRQ_PRI, qm_gpio_0_isr, 0,
-			    IOAPIC_LEVEL | IOAPIC_HIGH);
-		irq_enable(IRQ_GET_NUMBER(QM_IRQ_GPIO_0_INT));
+			    DT_GPIO_QMSI_0_IRQ_FLAGS);
+		irq_enable(DT_GPIO_QMSI_0_IRQ);
 		QM_IR_UNMASK_INTERRUPTS(QM_INTERRUPT_ROUTER->gpio_0_int_mask);
 		break;
 #ifdef CONFIG_GPIO_QMSI_1
 	case QM_AON_GPIO_0:
-		IRQ_CONNECT(IRQ_GET_NUMBER(QM_IRQ_AON_GPIO_0_INT),
-			    CONFIG_GPIO_QMSI_1_IRQ_PRI, qm_aon_gpio_0_isr,
-			    0, IOAPIC_LEVEL | IOAPIC_HIGH);
-		irq_enable(IRQ_GET_NUMBER(QM_IRQ_AON_GPIO_0_INT));
+		IRQ_CONNECT(DT_GPIO_QMSI_1_IRQ,
+			    DT_GPIO_QMSI_1_IRQ_PRI, qm_aon_gpio_0_isr,
+			    0, DT_GPIO_QMSI_1_IRQ_FLAGS);
+		irq_enable(DT_GPIO_QMSI_1_IRQ);
 		QM_IR_UNMASK_INTERRUPTS(
 			QM_INTERRUPT_ROUTER->aon_gpio_0_int_mask);
 		break;

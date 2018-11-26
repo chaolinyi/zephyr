@@ -57,9 +57,11 @@ The frdm_kl25z board configuration supports the following hardware features:
 +-----------+------------+-------------------------------------+
 | I2C       | on-chip    | i2c                                 |
 +-----------+------------+-------------------------------------+
-| SPI       | on-chip    | spi                                 |
+| ADC       | on-chip    | adc                                 |
 +-----------+------------+-------------------------------------+
 | FLASH     | on-chip    | soc flash                           |
++-----------+------------+-------------------------------------+
+| USB       | on-chip    | USB device                          |
 +-----------+------------+-------------------------------------+
 
 The default configuration can be found in the defconfig file:
@@ -77,6 +79,8 @@ The KL25Z SoC has five pairs of pinmux/gpio controllers, and all are currently e
 +-------+-------------+---------------------------+
 | Name  | Function    | Usage                     |
 +=======+=============+===========================+
+| PTB2  | ADC         | ADC0 channel 12           |
++-------+-------------+---------------------------+
 | PTB18 | GPIO        | Red LED                   |
 +-------+-------------+---------------------------+
 | PTB19 | GPIO        | Green LED                 |
@@ -91,14 +95,6 @@ The KL25Z SoC has five pairs of pinmux/gpio controllers, and all are currently e
 +-------+-------------+---------------------------+
 | PTE25 | I2C0_SDA    | I2C                       |
 +-------+-------------+---------------------------+
-| PTC4  | SPI0_PSC0   | SPI                       |
-+-------+-------------+---------------------------+
-| PTC5  | SPI0_SCK    | SPI                       |
-+-------+-------------+---------------------------+
-| PTC6  | SPI0_MOSI   | SPI                       |
-+-------+-------------+---------------------------+
-| PTC7  | SPI0_MISO   | SPI                       |
-+-------+-------------+---------------------------+
 
 
 System Clock
@@ -112,6 +108,13 @@ Serial Port
 
 The KL25Z UART0 is used for the console.
 
+USB
+===
+
+The KL25Z SoC has a USB OTG (USBOTG) controller that supports both
+device and host functions through its mini USB connector (USB KL25Z).
+Only USB device function is supported in Zephyr at the moment.
+
 Programming and Debugging
 *************************
 
@@ -120,25 +123,31 @@ into the board to provide debugging, flash programming, and serial
 communication over USB.
 
 To use the pyOCD tools with OpenSDA, follow the instructions in the
-:ref:`nxp_opensda_pyocd` page using the `DAPLink FRDM-KL25Z Firmware`_.
+:ref:`nxp_opensda_pyocd` page using the `DAPLink FRDM-KL25Z Firmware`_. The
+pyOCD tools are the default for this board, therefore it is not necessary to
+set ``OPENSDA_FW=daplink`` explicitly when programming and debugging.
 
-To use the Segger J-Link tools with OpenSDA, follow the instructions in the
-:ref:`nxp_opensda_jlink` page using the `Segger J-Link OpenSDA V2.1 Firmware`_.
+With these mechanisms, applications for the ``frdm_kl25z`` board
+configuration can be built and flashed in the usual way (see
+:ref:`build_an_application` and :ref:`application_run` for more
+details).
+
+To use the Segger J-Link tools with OpenSDA, follow the instructions
+in the :ref:`nxp_opensda_jlink` page using the `Segger J-Link OpenSDA
+V2.1 Firmware`_.  The Segger J-Link tools are not the default for this
+board, therefore it is necessary to set ``OPENSDA_FW=jlink``
+explicitly in the environment before programming and debugging.
 
 Flashing
 ========
 
 This example uses the :ref:`hello_world` sample with the
-:ref:`nxp_opensda_pyocd` tools. Use the ``make flash`` build target to build
-your Zephyr application, invoke the pyOCD flash tool and program your Zephyr
-application to flash.
+:ref:`nxp_opensda_pyocd` tools.
 
-.. code-block:: console
-
-   $ cd <zephyr_root_path>
-   $ . zephyr-env.sh
-   $ cd samples/hello_world/
-   $ make BOARD=frdm_kl25z FLASH_SCRIPT=pyocd.sh flash
+.. zephyr-app-commands::
+   :zephyr-app: samples/hello_world
+   :board: frdm_kl25z
+   :goals: flash
 
 Open a serial terminal (minicom, putty, etc.) with the following settings:
 
@@ -157,18 +166,14 @@ the following message:
 Debugging
 =========
 
-This example uses the :ref:`hello_world` sample with the
-:ref:`nxp_opensda_pyocd` tools. Use the ``make debug`` build target to build
-your Zephyr application, invoke the pyOCD GDB server, attach a GDB client, and
-program your Zephyr application to flash. It will leave you at a gdb prompt.
+You can debug an application in the usual way.  Here is an example for the
+:ref:`hello_world` application.
 
-.. code-block:: console
-
-   $ cd <zephyr_root_path>
-   $ . zephyr-env.sh
-   $ cd samples/hello_world/
-   $ make BOARD=frdm_kl25z DEBUG_SCRIPT=pyocd.sh debug
-
+.. zephyr-app-commands::
+   :zephyr-app: samples/hello_world
+   :board: frdm_kl25z
+   :maybe-skip-config:
+   :goals: debug
 
 .. _FRDM-KL25Z Website:
    http://www.nxp.com/products/software-and-tools/hardware-development-tools/freedom-development-boards/freedom-development-platform-for-kinetis-kl14-kl15-kl24-kl25-mcus:FRDM-KL25Z?tid=vanFRDM-KL25Z

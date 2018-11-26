@@ -17,6 +17,7 @@
 #include <wait_q.h>
 #include <misc/__assert.h>
 #include <init.h>
+#include <syscall_handler.h>
 
 extern struct k_stack _k_stack_list_start[];
 extern struct k_stack _k_stack_list_end[];
@@ -44,19 +45,60 @@ SYS_INIT(init_stack_module, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_OBJECTS);
 
 #endif /* CONFIG_OBJECT_TRACING */
 
-void k_stack_init(struct k_stack *stack, u32_t *buffer, int num_entries)
+void k_stack_init(struct k_stack *stack, u32_t *buffer,
+		  u32_t num_entries)
 {
-	sys_dlist_init(&stack->wait_q);
-	stack->next = stack->base = buffer;
+	_waitq_init(&stack->wait_q);
+	stack->base = buffer;
+	stack->next = buffer;
 	stack->top = stack->base + num_entries;
 
 	SYS_TRACING_OBJ_INIT(k_stack, stack);
+	_k_object_init(stack);
 }
 
-void k_stack_push(struct k_stack *stack, u32_t data)
+s32_t _impl_k_stack_alloc_init(struct k_stack *stack, u32_t num_entries)
+{
+	void *buffer;
+	s32_t ret;
+
+	buffer = z_thread_malloc(num_entries);
+	if (buffer != NULL) {
+		k_stack_init(stack, buffer, num_entries);
+		stack->flags = K_STACK_FLAG_ALLOC;
+		ret = (s32_t)0;
+	} else {
+		ret = -ENOMEM;
+	}
+
+	return ret;
+}
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(k_stack_alloc_init, stack, num_entries)
+{
+	Z_OOPS(Z_SYSCALL_OBJ_NEVER_INIT(stack, K_OBJ_STACK));
+	Z_OOPS(Z_SYSCALL_VERIFY(num_entries > 0));
+
+	return _impl_k_stack_alloc_init((struct k_stack *)stack, num_entries);
+}
+#endif
+
+void k_stack_cleanup(struct k_stack *stack)
+{
+	__ASSERT_NO_MSG(_waitq_head(&stack->wait_q) == NULL);
+
+	if ((stack->flags & K_STACK_FLAG_ALLOC) != (u8_t)0) {
+		k_free(stack->base);
+		stack->base = NULL;
+		stack->flags &= ~K_STACK_FLAG_ALLOC;
+	}
+}
+
+void _impl_k_stack_push(struct k_stack *stack, u32_t data)
 {
 	struct k_thread *first_pending_thread;
-	unsigned int key;
+	u32_t key;
 
 	__ASSERT(stack->next != stack->top, "stack is full");
 
@@ -64,28 +106,38 @@ void k_stack_push(struct k_stack *stack, u32_t data)
 
 	first_pending_thread = _unpend_first_thread(&stack->wait_q);
 
-	if (first_pending_thread) {
-		_abort_thread_timeout(first_pending_thread);
+	if (first_pending_thread != NULL) {
 		_ready_thread(first_pending_thread);
 
 		_set_thread_return_value_with_data(first_pending_thread,
 						   0, (void *)data);
-
-		if (!_is_in_isr() && _must_switch_threads()) {
-			(void)_Swap(key);
-			return;
-		}
+		_reschedule(key);
+		return;
 	} else {
 		*(stack->next) = data;
 		stack->next++;
+		irq_unlock(key);
 	}
 
-	irq_unlock(key);
 }
 
-int k_stack_pop(struct k_stack *stack, u32_t *data, s32_t timeout)
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(k_stack_push, stack_p, data)
 {
-	unsigned int key;
+	struct k_stack *stack = (struct k_stack *)stack_p;
+
+	Z_OOPS(Z_SYSCALL_OBJ(stack, K_OBJ_STACK));
+	Z_OOPS(Z_SYSCALL_VERIFY_MSG(stack->next != stack->top,
+				    "stack is full"));
+
+	_impl_k_stack_push(stack, data);
+	return 0;
+}
+#endif
+
+int _impl_k_stack_pop(struct k_stack *stack, u32_t *data, s32_t timeout)
+{
+	u32_t key;
 	int result;
 
 	key = irq_lock();
@@ -102,11 +154,22 @@ int k_stack_pop(struct k_stack *stack, u32_t *data, s32_t timeout)
 		return -EBUSY;
 	}
 
-	_pend_current_thread(&stack->wait_q, timeout);
-
-	result = _Swap(key);
-	if (result == 0) {
-		*data = (u32_t)_current->base.swap_data;
+	result = _pend_current_thread(key, &stack->wait_q, timeout);
+	if (result == -EAGAIN) {
+		return -EAGAIN;
 	}
-	return result;
+
+	*data = (u32_t)_current->base.swap_data;
+	return 0;
 }
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(k_stack_pop, stack, data, timeout)
+{
+	Z_OOPS(Z_SYSCALL_OBJ(stack, K_OBJ_STACK));
+	Z_OOPS(Z_SYSCALL_MEMORY_WRITE(data, sizeof(u32_t)));
+
+	return _impl_k_stack_pop((struct k_stack *)stack, (u32_t *)data,
+				 timeout);
+}
+#endif

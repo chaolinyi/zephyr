@@ -9,6 +9,7 @@
 #include <kernel_structs.h>
 #include <misc/printk.h>
 #include <inttypes.h>
+#include <logging/log_ctrl.h>
 
 const NANO_ESF _default_esf = {
 	0xdeadbaad,
@@ -50,16 +51,13 @@ const NANO_ESF _default_esf = {
 FUNC_NORETURN void _NanoFatalErrorHandler(unsigned int reason,
 					  const NANO_ESF *esf)
 {
+	LOG_PANIC();
+
 #ifdef CONFIG_PRINTK
 	switch (reason) {
 	case _NANO_ERR_CPU_EXCEPTION:
 	case _NANO_ERR_SPURIOUS_INT:
 		break;
-
-	case _NANO_ERR_INVALID_TASK_EXIT:
-		printk("***** Invalid Exit Software Error! *****\n");
-		break;
-
 
 	case _NANO_ERR_ALLOCATION_FAIL:
 		printk("**** Kernel Allocation Failure! ****\n");

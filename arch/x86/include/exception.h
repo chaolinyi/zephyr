@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef X86_EXCEPTION_H
-#define X86_EXCEPTION_H
+#ifndef ZEPHYR_ARCH_X86_INCLUDE_EXCEPTION_H_
+#define ZEPHYR_ARCH_X86_INCLUDE_EXCEPTION_H_
 
 #ifndef _ASMLANGUAGE
 
@@ -18,6 +18,7 @@
 	".long -1\n\t"				/* ISR_LIST.priority */ \
 	".long " STRINGIFY(vector) "\n\t"	/* ISR_LIST.vec */ \
 	".long 0\n\t"				/* ISR_LIST.dpl */ \
+	".long 0\n\t"				/* ISR_LIST.tss */ \
 	".popsection\n\t" \
 
 /* Extra preprocessor indirection to ensure arguments get expanded before
@@ -82,4 +83,4 @@
 
 #endif /* _ASMLANGUAGE */
 
-#endif /* X86_EXCEPTION_H */
+#endif /* ZEPHYR_ARCH_X86_INCLUDE_EXCEPTION_H_ */

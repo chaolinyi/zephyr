@@ -18,13 +18,13 @@ have defined the SW0_* variable in board.h
 To use this sample, you will require a board that defines the user switch in its
 header file. The :file:`board.h` must define the following variables:
 
-- SW0_GPIO_NAME
+- SW0_GPIO_NAME (or SW0_GPIO_CONTROLLER)
 - SW0_GPIO_PIN
 
 The following boards currently define the above variables:
 
 - bbc_microbit
-- cc3200_launchxl
+- cc3220sf_launchxl
 - frdm_k64f
 - nrf51_pca10028
 - nrf52840_pca10056
@@ -41,11 +41,11 @@ Building and Running
 This sample can be built for multiple boards, in this example we will build it
 for the nucleo_f103rb board:
 
-.. code-block:: console
-
-   $ cd samples/basic/button
-   $ make BOARD=nucleo_f103rb
-
+.. zephyr-app-commands::
+   :zephyr-app: samples/basic/button
+   :board: nucleo_f103rb
+   :goals: build
+   :compact:
 
 After startup, the program looks up a predefined GPIO device, and configures the
 pin in input mode, enabling interrupt generation on falling edge. During each

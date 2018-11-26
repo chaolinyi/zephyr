@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define LOG_MODULE_NAME net_ieee802154_fake_driver
+#define NET_LOG_LEVEL LOG_LEVEL_DBG
+
 #include <zephyr.h>
 
 #include <net/net_core.h>
-#define NET_LOG_ENABLED 1
-#define NET_SYS_LOG_LEVEL 4
 #include "net_private.h"
 
 #include <net/net_pkt.h>
@@ -19,6 +20,11 @@
 extern struct net_pkt *current_pkt;
 extern struct k_sem driver_lock;
 
+static enum ieee802154_hw_caps fake_get_capabilities(struct device *dev)
+{
+	return IEEE802154_HW_FCS | IEEE802154_HW_2_4_GHZ;
+}
+
 static int fake_cca(struct device *dev)
 {
 	return 0;
@@ -27,29 +33,6 @@ static int fake_cca(struct device *dev)
 static int fake_set_channel(struct device *dev, u16_t channel)
 {
 	NET_INFO("Channel %u\n", channel);
-
-	return 0;
-}
-
-static int fake_set_pan_id(struct device *dev, u16_t pan_id)
-{
-	NET_INFO("PAN id 0x%x\n", pan_id);
-
-	return 0;
-}
-
-static int fake_set_short_addr(struct device *dev, u16_t short_addr)
-{
-	NET_INFO("Short address: 0x%x\n", short_addr);
-
-	return 0;
-}
-
-static int fake_set_ieee_addr(struct device *dev, const u8_t *ieee_addr)
-{
-	NET_INFO("IEEE address %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
-		 ieee_addr[0], ieee_addr[1], ieee_addr[2], ieee_addr[3],
-		 ieee_addr[4], ieee_addr[5], ieee_addr[6], ieee_addr[7]);
 
 	return 0;
 }
@@ -85,6 +68,10 @@ static int fake_tx(struct device *dev,
 {
 	NET_INFO("Sending packet %p - length %zu\n",
 		 pkt, net_pkt_get_len(pkt));
+
+	if (!current_pkt) {
+		return 0;
+	}
 
 	net_pkt_set_ll_reserve(current_pkt, net_pkt_ll_reserve(pkt));
 
@@ -135,15 +122,13 @@ static struct ieee802154_radio_api fake_radio_api = {
 	.iface_api.init	= fake_iface_init,
 	.iface_api.send	= ieee802154_radio_send,
 
-	.cca		= fake_cca,
-	.set_channel	= fake_set_channel,
-	.set_pan_id	= fake_set_pan_id,
-	.set_short_addr	= fake_set_short_addr,
-	.set_ieee_addr	= fake_set_ieee_addr,
-	.set_txpower	= fake_set_txpower,
-	.start		= fake_start,
-	.stop		= fake_stop,
-	.tx		= fake_tx,
+	.get_capabilities	= fake_get_capabilities,
+	.cca			= fake_cca,
+	.set_channel		= fake_set_channel,
+	.set_txpower		= fake_set_txpower,
+	.start			= fake_start,
+	.stop			= fake_stop,
+	.tx			= fake_tx,
 };
 
 NET_DEVICE_INIT(fake, "fake_ieee802154",

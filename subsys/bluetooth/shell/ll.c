@@ -9,16 +9,115 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdlib.h>
 #include <string.h>
 #include <zephyr.h>
-#include <shell/shell.h>
-#include <misc/printk.h>
 
 #include <bluetooth/hci.h>
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/conn.h>
+
+#include <shell/shell.h>
 
 #include "../controller/include/ll.h"
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT)
+#include "bt.h"
+
+int cmd_ll_addr_get(const struct shell *shell, size_t argc, char *argv[])
+{
+	u8_t addr_type;
+	const char *str_type;
+	bt_addr_t addr;
+	char str_addr[BT_ADDR_STR_LEN];
+
+	if (argc < 2) {
+		return -EINVAL;
+	}
+
+	str_type = argv[1];
+	if (!strcmp(str_type, "random")) {
+		addr_type = 1;
+	} else if (!strcmp(str_type, "public")) {
+		addr_type = 0;
+	} else {
+		return -EINVAL;
+	}
+
+	(void)ll_addr_get(addr_type, addr.val);
+	bt_addr_to_str(&addr, str_addr, sizeof(str_addr));
+
+	shell_print(shell, "Current %s address: %s\n", str_type, str_addr);
+
+	return 0;
+}
+
+#if defined(CONFIG_BT_CTLR_DTM)
+#include "../controller/ll_sw/ll_test.h"
+
+int cmd_test_tx(const struct shell *shell, size_t  argc, char *argv[])
+{
+	u8_t chan, len, type, phy;
+	u32_t err;
+
+	if (argc < 5) {
+		return -EINVAL;
+	}
+
+	chan = strtoul(argv[1], NULL, 16);
+	len  = strtoul(argv[2], NULL, 16);
+	type = strtoul(argv[3], NULL, 16);
+	phy  = strtoul(argv[4], NULL, 16);
+
+	err = ll_test_tx(chan, len, type, phy);
+	if (err) {
+		return -EINVAL;
+	}
+
+	shell_print(shell, "test_tx...");
+
+	return 0;
+}
+
+int cmd_test_rx(const struct shell *shell, size_t  argc, char *argv[])
+{
+	u8_t chan, phy, mod_idx;
+	u32_t err;
+
+	if (argc < 4) {
+		return -EINVAL;
+	}
+
+	chan    = strtoul(argv[1], NULL, 16);
+	phy     = strtoul(argv[2], NULL, 16);
+	mod_idx = strtoul(argv[3], NULL, 16);
+
+	err = ll_test_rx(chan, phy, mod_idx);
+	if (err) {
+		return -EINVAL;
+	}
+
+	shell_print(shell, "test_rx...");
+
+	return 0;
+}
+
+int cmd_test_end(const struct shell *shell, size_t  argc, char *argv[])
+{
+	u16_t num_rx;
+	u32_t err;
+
+	err = ll_test_end(&num_rx);
+	if (err) {
+		return -EINVAL;
+	}
+
+	shell_print(shell, "num_rx= %u.", num_rx);
+
+	return 0;
+}
+#endif /* CONFIG_BT_CTLR_DTM */
+
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
 #define ADV_INTERVAL 0x000020
 #define ADV_TYPE 0x05 /* Adv. Ext. */
 #define OWN_ADDR_TYPE 1
@@ -37,7 +136,7 @@
 #define SCAN_OWN_ADDR_TYPE 1
 #define SCAN_FILTER_POLICY 0
 
-int cmd_advx(int argc, char *argv[])
+int cmd_advx(const struct shell *shell, size_t argc, char *argv[])
 {
 	u16_t evt_prop;
 	u8_t enable;
@@ -92,7 +191,7 @@ int cmd_advx(int argc, char *argv[])
 		}
 	}
 
-	printk("adv param set...");
+	shell_print(shell, "adv param set...");
 	err = ll_adv_params_set(0x00, evt_prop, ADV_INTERVAL, ADV_TYPE,
 				OWN_ADDR_TYPE, PEER_ADDR_TYPE, PEER_ADDR,
 				ADV_CHAN_MAP, FILTER_POLICY, ADV_TX_PWR,
@@ -103,19 +202,19 @@ int cmd_advx(int argc, char *argv[])
 	}
 
 disable:
-	printk("adv enable (%u)...", enable);
+	shell_print(shell, "adv enable (%u)...", enable);
 	err = ll_adv_enable(enable);
 	if (err) {
 		goto exit;
 	}
 
 exit:
-	printk("done (err= %d).\n", err);
+	shell_print(shell, "done (err= %d).", err);
 
 	return 0;
 }
 
-int cmd_scanx(int argc, char *argv[])
+int cmd_scanx(const struct shell *shell, size_t  argc, char *argv[])
 {
 	u8_t type = 0;
 	u8_t enable;
@@ -151,7 +250,7 @@ int cmd_scanx(int argc, char *argv[])
 		}
 	}
 
-	printk("scan param set...");
+	shell_print(shell, "scan param set...");
 	err = ll_scan_params_set(type, SCAN_INTERVAL, SCAN_WINDOW,
 				 SCAN_OWN_ADDR_TYPE, SCAN_FILTER_POLICY);
 	if (err) {
@@ -159,15 +258,15 @@ int cmd_scanx(int argc, char *argv[])
 	}
 
 disable:
-	printk("scan enable (%u)...", enable);
+	shell_print(shell, "scan enable (%u)...", enable);
 	err = ll_scan_enable(enable);
 	if (err) {
 		goto exit;
 	}
 
 exit:
-	printk("done (err= %d).\n", err);
+	shell_print(shell, "done (err= %d).", err);
 
-	return 0;
+	return err;
 }
-#endif /* CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT */
+#endif /* CONFIG_BT_CTLR_ADV_EXT */

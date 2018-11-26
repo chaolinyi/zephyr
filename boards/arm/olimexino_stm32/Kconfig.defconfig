@@ -8,16 +8,40 @@
 if BOARD_OLIMEXINO_STM32
 
 config BOARD
-	default olimexino_stm32
+	default "olimexino_stm32"
 
-if I2C_2
+if UART_CONSOLE
 
-config I2C_2_DEFAULT_CFG
-	default 0x14
+config UART_STM32_PORT_1
+	default y
 
-config I2C_2_IRQ_PRI
-	default 0
+endif # UART_CONSOLE
 
-endif # I2C_2
+if I2C
+
+config I2C_2
+	default y
+
+endif # I2C
+
+if SPI
+
+config SPI_STM32_INTERRUPT
+	default y
+
+config SPI_1
+	default y
+
+config SPI_2
+	default y
+
+endif # SPI
+
+if PWM
+
+config PWM_STM32_1
+	default y
+
+endif # PWM
 
 endif # BOARD_OLIMEXINO_STM32

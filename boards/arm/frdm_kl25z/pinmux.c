@@ -48,13 +48,9 @@ static int frdm_kl25z_pinmux_init(struct device *dev)
 	pinmux_pin_set(portb, 18, PORT_PCR_MUX(kPORT_MuxAsGpio));
 	pinmux_pin_set(portb, 19, PORT_PCR_MUX(kPORT_MuxAsGpio));
 
-#if defined(CONFIG_SPI_0)
-	/* SPI0 CLK, MOSI, MISO */
-	pinmux_pin_set(portc, 4, PORT_PCR_MUX(kPORT_MuxAlt2));
-	pinmux_pin_set(portc, 5, PORT_PCR_MUX(kPORT_MuxAlt2));
-	pinmux_pin_set(portc, 6, PORT_PCR_MUX(kPORT_MuxAlt2));
-	pinmux_pin_set(portc, 7, PORT_PCR_MUX(kPORT_MuxAlt2));
-#endif
+	/* MMA8451 INT1, INT2 */
+	pinmux_pin_set(porta, 14, PORT_PCR_MUX(kPORT_MuxAsGpio));
+	pinmux_pin_set(porta, 15, PORT_PCR_MUX(kPORT_MuxAsGpio));
 
 #if defined(CONFIG_I2C_0)
 	/* I2C0 SCL, SDA */
@@ -62,6 +58,11 @@ static int frdm_kl25z_pinmux_init(struct device *dev)
 					| PORT_PCR_PS_MASK);
 	pinmux_pin_set(porte,  25, PORT_PCR_MUX(kPORT_MuxAlt5)
 					| PORT_PCR_PS_MASK);
+#endif
+
+#if CONFIG_ADC_0
+	/* ADC0_SE12 */
+	pinmux_pin_set(portb,  2, PORT_PCR_MUX(kPORT_PinDisabledOrAnalog));
 #endif
 
 	return 0;

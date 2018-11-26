@@ -12,8 +12,8 @@
  * other definitions for the RISCV32 processor architecture.
  */
 
-#ifndef _kernel_arch_func__h_
-#define _kernel_arch_func__h_
+#ifndef ZEPHYR_ARCH_RISCV32_INCLUDE_KERNEL_ARCH_FUNC_H_
+#define ZEPHYR_ARCH_RISCV32_INCLUDE_KERNEL_ARCH_FUNC_H_
 
 #include <soc.h>
 
@@ -27,7 +27,8 @@ void k_cpu_atomic_idle(unsigned int key);
 
 static ALWAYS_INLINE void kernel_arch_init(void)
 {
-	_kernel.irq_stack = _interrupt_stack + CONFIG_ISR_STACK_SIZE;
+	_kernel.irq_stack =
+		K_THREAD_STACK_BUFFER(_interrupt_stack) + CONFIG_ISR_STACK_SIZE;
 }
 
 static ALWAYS_INLINE void
@@ -47,7 +48,7 @@ FUNC_NORETURN void _NanoFatalErrorHandler(unsigned int reason,
 					  const NANO_ESF *esf);
 
 
-#define _is_in_isr() (_kernel.nested != 0)
+#define _is_in_isr() (_kernel.nested != 0U)
 
 #ifdef CONFIG_IRQ_OFFLOAD
 int _irq_do_offload(void);
@@ -59,4 +60,4 @@ int _irq_do_offload(void);
 }
 #endif
 
-#endif /* _kernel_arch_func__h_ */
+#endif /* ZEPHYR_ARCH_RISCV32_INCLUDE_KERNEL_ARCH_FUNC_H_ */

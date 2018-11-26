@@ -94,6 +94,9 @@ struct net_nbr_table {
 
 	/** Function to be called when the table is cleared. */
 	void (*const clear)(struct net_nbr_table *table);
+
+	/** Max number of neighbors in the pool */
+	const u16_t nbr_count;
 };
 
 #define NET_NBR_LOCAL static
@@ -108,6 +111,7 @@ struct net_nbr_table {
 		.table = {						\
 			.clear = _clear,				\
 			.nbr = (struct net_nbr *)_pool,			\
+			.nbr_count = ARRAY_SIZE(_pool),			\
 		}							\
 	}
 
@@ -128,7 +132,7 @@ static inline void *net_nbr_extra_data(struct net_nbr *nbr)
  * is released and returned to free list.
  * @param nbr Pointer to neighbor
  */
-#if defined(CONFIG_NET_DEBUG_IPV6_NBR_CACHE)
+#if defined(CONFIG_NET_IPV6_NBR_CACHE_LOG_LEVEL_DBG)
 void net_nbr_unref_debug(struct net_nbr *nbr, const char *caller, int line);
 #define net_nbr_unref(nbr) net_nbr_unref_debug(nbr, __func__, __LINE__)
 #else
@@ -140,7 +144,7 @@ void net_nbr_unref(struct net_nbr *nbr);
  * @param nbr Pointer to neighbor
  * @return Pointer to neighbor
  */
-#if defined(CONFIG_NET_DEBUG_IPV6_NBR_CACHE)
+#if defined(CONFIG_NET_IPV6_NBR_CACHE_LOG_LEVEL_DBG)
 struct net_nbr *net_nbr_ref_debug(struct net_nbr *nbr, const char *caller,
 				  int line);
 #define net_nbr_ref(nbr) net_nbr_ref_debug(nbr, __func__, __LINE__)
@@ -198,15 +202,11 @@ struct net_linkaddr_storage *net_nbr_get_lladdr(u8_t idx);
  */
 void net_nbr_clear_table(struct net_nbr_table *table);
 
-#if defined(CONFIG_NET_DEBUG_IPV6_NBR_CACHE)
 /**
  * @brief Debug helper to print out the neighbor information.
  * @param table Neighbor table
  */
 void net_nbr_print(struct net_nbr_table *table);
-#else
-#define net_nbr_print(...)
-#endif /* CONFIG_NET_DEBUG_IPV6_NBR_CACHE */
 
 #ifdef __cplusplus
 }

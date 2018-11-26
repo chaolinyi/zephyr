@@ -16,6 +16,10 @@
 #include <misc/byteorder.h>
 #include <console/uart_pipe.h>
 
+#include <logging/log.h>
+#define LOG_MODULE_NAME bttester
+LOG_MODULE_REGISTER(LOG_MODULE_NAME);
+
 #include "bttester.h"
 
 #define STACKSIZE 2048
@@ -23,7 +27,15 @@ static K_THREAD_STACK_DEFINE(stack, STACKSIZE);
 static struct k_thread cmd_thread;
 
 #define CMD_QUEUED 2
-static u8_t cmd_buf[CMD_QUEUED * BTP_MTU];
+struct btp_buf {
+	u32_t _reserved;
+	union {
+		u8_t data[BTP_MTU];
+		struct btp_hdr hdr;
+	};
+};
+
+static struct btp_buf cmd_buf[CMD_QUEUED];
 
 static K_FIFO_DEFINE(cmds_queue);
 static K_FIFO_DEFINE(avail_queue);
@@ -33,11 +45,12 @@ static void supported_commands(u8_t *data, u16_t len)
 	u8_t buf[1];
 	struct core_read_supported_commands_rp *rp = (void *) buf;
 
-	memset(buf, 0, sizeof(buf));
+	(void)memset(buf, 0, sizeof(buf));
 
 	tester_set_bit(buf, CORE_READ_SUPPORTED_COMMANDS);
 	tester_set_bit(buf, CORE_READ_SUPPORTED_SERVICES);
 	tester_set_bit(buf, CORE_REGISTER_SERVICE);
+	tester_set_bit(buf, CORE_UNREGISTER_SERVICE);
 
 	tester_send(BTP_SERVICE_ID_CORE, CORE_READ_SUPPORTED_COMMANDS,
 		    BTP_INDEX_NONE, (u8_t *) rp, sizeof(buf));
@@ -48,14 +61,17 @@ static void supported_services(u8_t *data, u16_t len)
 	u8_t buf[1];
 	struct core_read_supported_services_rp *rp = (void *) buf;
 
-	memset(buf, 0, sizeof(buf));
+	(void)memset(buf, 0, sizeof(buf));
 
 	tester_set_bit(buf, BTP_SERVICE_ID_CORE);
 	tester_set_bit(buf, BTP_SERVICE_ID_GAP);
 	tester_set_bit(buf, BTP_SERVICE_ID_GATT);
-#if defined(CONFIG_BLUETOOTH_L2CAP_DYNAMIC_CHANNEL)
+#if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
 	tester_set_bit(buf, BTP_SERVICE_ID_L2CAP);
-#endif /* CONFIG_BLUETOOTH_L2CAP_DYNAMIC_CHANNEL */
+#endif /* CONFIG_BT_L2CAP_DYNAMIC_CHANNEL */
+#if defined(CONFIG_BT_MESH)
+	tester_set_bit(buf, BTP_SERVICE_ID_MESH);
+#endif /* CONFIG_BT_MESH */
 
 	tester_send(BTP_SERVICE_ID_CORE, CORE_READ_SUPPORTED_SERVICES,
 		    BTP_INDEX_NONE, (u8_t *) rp, sizeof(buf));
@@ -77,11 +93,16 @@ static void register_service(u8_t *data, u16_t len)
 	case BTP_SERVICE_ID_GATT:
 		status = tester_init_gatt();
 		break;
-#if defined(CONFIG_BLUETOOTH_L2CAP_DYNAMIC_CHANNEL)
+#if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
 	case BTP_SERVICE_ID_L2CAP:
 		status = tester_init_l2cap();
-#endif /* CONFIG_BLUETOOTH_L2CAP_DYNAMIC_CHANNEL */
+#endif /* CONFIG_BT_L2CAP_DYNAMIC_CHANNEL */
 		break;
+#if defined(CONFIG_BT_MESH)
+	case BTP_SERVICE_ID_MESH:
+		status = tester_init_mesh();
+		break;
+#endif /* CONFIG_BT_MESH */
 	default:
 		status = BTP_STATUS_FAILED;
 		break;
@@ -89,6 +110,37 @@ static void register_service(u8_t *data, u16_t len)
 
 rsp:
 	tester_rsp(BTP_SERVICE_ID_CORE, CORE_REGISTER_SERVICE, BTP_INDEX_NONE,
+		   status);
+}
+
+static void unregister_service(u8_t *data, u16_t len)
+{
+	struct core_unregister_service_cmd *cmd = (void *) data;
+	u8_t status;
+
+	switch (cmd->id) {
+	case BTP_SERVICE_ID_GAP:
+		status = tester_unregister_gap();
+		break;
+	case BTP_SERVICE_ID_GATT:
+		status = tester_unregister_gatt();
+		break;
+#if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
+	case BTP_SERVICE_ID_L2CAP:
+		status = tester_unregister_l2cap();
+		break;
+#endif /* CONFIG_BT_L2CAP_DYNAMIC_CHANNEL */
+#if defined(CONFIG_BT_MESH)
+	case BTP_SERVICE_ID_MESH:
+		status = tester_unregister_mesh();
+		break;
+#endif /* CONFIG_BT_MESH */
+	default:
+		status = BTP_STATUS_FAILED;
+		break;
+	}
+
+	tester_rsp(BTP_SERVICE_ID_CORE, CORE_UNREGISTER_SERVICE, BTP_INDEX_NONE,
 		   status);
 }
 
@@ -110,6 +162,9 @@ static void handle_core(u8_t opcode, u8_t index, u8_t *data,
 	case CORE_REGISTER_SERVICE:
 		register_service(data, len);
 		return;
+	case CORE_UNREGISTER_SERVICE:
+		unregister_service(data, len);
+		return;
 	default:
 		tester_rsp(BTP_SERVICE_ID_CORE, opcode, BTP_INDEX_NONE,
 			   BTP_STATUS_UNKNOWN_CMD);
@@ -120,38 +175,45 @@ static void handle_core(u8_t opcode, u8_t index, u8_t *data,
 static void cmd_handler(void *p1, void *p2, void *p3)
 {
 	while (1) {
-		struct btp_hdr *cmd;
+		struct btp_buf *cmd;
 		u16_t len;
 
 		cmd = k_fifo_get(&cmds_queue, K_FOREVER);
 
-		len = sys_le16_to_cpu(cmd->len);
+		len = sys_le16_to_cpu(cmd->hdr.len);
 
 		/* TODO
 		 * verify if service is registered before calling handler
 		 */
 
-		switch (cmd->service) {
+		switch (cmd->hdr.service) {
 		case BTP_SERVICE_ID_CORE:
-			handle_core(cmd->opcode, cmd->index, cmd->data, len);
+			handle_core(cmd->hdr.opcode, cmd->hdr.index,
+				    cmd->hdr.data, len);
 			break;
 		case BTP_SERVICE_ID_GAP:
-			tester_handle_gap(cmd->opcode, cmd->index, cmd->data,
-					  len);
+			tester_handle_gap(cmd->hdr.opcode, cmd->hdr.index,
+					  cmd->hdr.data, len);
 			break;
 		case BTP_SERVICE_ID_GATT:
-			tester_handle_gatt(cmd->opcode, cmd->index, cmd->data,
-					    len);
+			tester_handle_gatt(cmd->hdr.opcode, cmd->hdr.index,
+					   cmd->hdr.data, len);
 			break;
-#if defined(CONFIG_BLUETOOTH_L2CAP_DYNAMIC_CHANNEL)
+#if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
 		case BTP_SERVICE_ID_L2CAP:
-			tester_handle_l2cap(cmd->opcode, cmd->index, cmd->data,
-					    len);
-#endif /* CONFIG_BLUETOOTH_L2CAP_DYNAMIC_CHANNEL */
+			tester_handle_l2cap(cmd->hdr.opcode, cmd->hdr.index,
+					    cmd->hdr.data, len);
+#endif /* CONFIG_BT_L2CAP_DYNAMIC_CHANNEL */
 			break;
+#if defined(CONFIG_BT_MESH)
+		case BTP_SERVICE_ID_MESH:
+			tester_handle_mesh(cmd->hdr.opcode, cmd->hdr.index,
+					   cmd->hdr.data, len);
+			break;
+#endif /* CONFIG_BT_MESH */
 		default:
-			tester_rsp(cmd->service, cmd->opcode, cmd->index,
-				   BTP_STATUS_FAILED);
+			tester_rsp(cmd->hdr.service, cmd->hdr.opcode,
+				   cmd->hdr.index, BTP_STATUS_FAILED);
 			break;
 		}
 
@@ -162,7 +224,7 @@ static void cmd_handler(void *p1, void *p2, void *p3)
 static u8_t *recv_cb(u8_t *buf, size_t *off)
 {
 	struct btp_hdr *cmd = (void *) buf;
-	u8_t *new_buf;
+	struct btp_buf *new_buf;
 	u16_t len;
 
 	if (*off < sizeof(*cmd)) {
@@ -171,7 +233,7 @@ static u8_t *recv_cb(u8_t *buf, size_t *off)
 
 	len = sys_le16_to_cpu(cmd->len);
 	if (len > BTP_MTU - sizeof(*cmd)) {
-		SYS_LOG_ERR("BT tester: invalid packet length");
+		LOG_ERR("BT tester: invalid packet length");
 		*off = 0;
 		return buf;
 	}
@@ -182,30 +244,31 @@ static u8_t *recv_cb(u8_t *buf, size_t *off)
 
 	new_buf =  k_fifo_get(&avail_queue, K_NO_WAIT);
 	if (!new_buf) {
-		SYS_LOG_ERR("BT tester: RX overflow");
+		LOG_ERR("BT tester: RX overflow");
 		*off = 0;
 		return buf;
 	}
 
-	k_fifo_put(&cmds_queue, buf);
+	k_fifo_put(&cmds_queue, CONTAINER_OF(buf, struct btp_buf, data));
 
 	*off = 0;
-	return new_buf;
+	return new_buf->data;
 }
 
 void tester_init(void)
 {
 	int i;
+	struct btp_buf *buf;
 
 	for (i = 0; i < CMD_QUEUED; i++) {
-		k_fifo_put(&avail_queue, &cmd_buf[i * BTP_MTU]);
+		k_fifo_put(&avail_queue, &cmd_buf[i]);
 	}
 
 	k_thread_create(&cmd_thread, stack, STACKSIZE, cmd_handler,
 			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
 
-	uart_pipe_register(k_fifo_get(&avail_queue, K_NO_WAIT),
-			   BTP_MTU, recv_cb);
+	buf = k_fifo_get(&avail_queue, K_NO_WAIT);
+	uart_pipe_register(buf->data, BTP_MTU, recv_cb);
 
 	tester_send(BTP_SERVICE_ID_CORE, CORE_EV_IUT_READY, BTP_INDEX_NONE,
 		    NULL, 0);

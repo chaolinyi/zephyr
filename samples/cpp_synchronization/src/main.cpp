@@ -42,10 +42,10 @@ K_THREAD_STACK_DEFINE(coop_stack, STACKSIZE);
 
 /*
  * @class cpp_semaphore
- * @brief nano semaphore
+ * @brief Semaphore
  *
  * Class derives from the pure virtual semaphore class and
- * implements it's methods for the nanokernel semaphore
+ * implements it's methods for the semaphore
  */
 class cpp_semaphore: public semaphore {
 protected:
@@ -133,7 +133,7 @@ void coop_thread_entry(void)
 	}
 }
 
-void main(void)
+int main(void)
 {
 	struct k_timer timer;
 
@@ -154,4 +154,6 @@ void main(void)
 		/* Wait for coop thread to let us have a turn */
 		sem_main.wait();
 	}
+
+	return 0;
 }

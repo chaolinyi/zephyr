@@ -6,6 +6,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define LOG_MODULE_NAME net_test
+#define NET_LOG_LEVEL CONFIG_NET_L2_IEEE802154_LOG_LEVEL
+
 #include <zephyr.h>
 #include <linker/sections.h>
 
@@ -33,7 +36,7 @@
 
 /**
   * IPv6 Source and Destination address
-  * Example addresses are based on SAC (Source Adddress Compression),
+  * Example addresses are based on SAC (Source Address Compression),
   * SAM (Source Address Mode), DAC (Destination Address Compression),
   * DAM (Destination Address Mode) and also if the destination address
   * is Multicast address.
@@ -251,8 +254,7 @@ static struct net_pkt *create_pkt(struct net_fragment_data *data)
 	frag->data[44] = len >> 8;
 	frag->data[45] = (u8_t) len;
 
-	data->ipv6.len[0] = len >> 8;
-	data->ipv6.len[1] = (u8_t) len;
+	data->ipv6.len = htons(len);
 	data->udp.len = htons(len);
 
 	while (remaining > 0) {
@@ -283,7 +285,7 @@ static struct net_fragment_data test_data_1 = {
 	.ipv6.vtc = 0x60,
 	.ipv6.tcflow = 0x00,
 	.ipv6.flow = 0x00,
-	.ipv6.len = { 0x00, 0x00 },
+	.ipv6.len = 0,
 	.ipv6.nexthdr = IPPROTO_UDP,
 	.ipv6.hop_limit = 0xff,
 	.ipv6.src = src_sam00,
@@ -300,7 +302,7 @@ static struct net_fragment_data test_data_2 = {
 	.ipv6.vtc = 0x60,
 	.ipv6.tcflow = 0x20,
 	.ipv6.flow = 0x3412,
-	.ipv6.len = { 0x00, 0x00 },
+	.ipv6.len = 0,
 	.ipv6.nexthdr = IPPROTO_UDP,
 	.ipv6.hop_limit = 0xff,
 	.ipv6.src = src_sam01,
@@ -317,7 +319,7 @@ static struct net_fragment_data test_data_3 = {
 	.ipv6.vtc = 0x60,
 	.ipv6.tcflow = 0x21,
 	.ipv6.flow = 0x3412,
-	.ipv6.len = { 0x00, 0x00 },
+	.ipv6.len = 0,
 	.ipv6.nexthdr = IPPROTO_UDP,
 	.ipv6.hop_limit = 0xff,
 	.ipv6.src = src_sam10,
@@ -334,7 +336,7 @@ static struct net_fragment_data test_data_4 = {
 	.ipv6.vtc = 0x61,
 	.ipv6.tcflow = 0x20,
 	.ipv6.flow = 0x00,
-	.ipv6.len = { 0x00, 0x00 },
+	.ipv6.len = 0,
 	.ipv6.nexthdr = IPPROTO_UDP,
 	.ipv6.hop_limit = 0xff,
 	.ipv6.src = src_sam00,
@@ -351,7 +353,7 @@ static struct net_fragment_data test_data_5 = {
 	.ipv6.vtc = 0x61,
 	.ipv6.tcflow = 0x23,
 	.ipv6.flow = 0x4567,
-	.ipv6.len = { 0x00, 0x00 },
+	.ipv6.len = 0,
 	.ipv6.nexthdr = IPPROTO_UDP,
 	.ipv6.hop_limit = 0xff,
 	.ipv6.src = src_sam01,
@@ -368,7 +370,7 @@ static struct net_fragment_data test_data_6 = {
 	.ipv6.vtc = 0x60,
 	.ipv6.tcflow = 0x0,
 	.ipv6.flow = 0x0,
-	.ipv6.len = { 0x00, 0x00 },
+	.ipv6.len = 0,
 	.ipv6.nexthdr = IPPROTO_UDP,
 	.ipv6.hop_limit = 0xff,
 	.ipv6.src = src_sam10,
@@ -385,7 +387,7 @@ static struct net_fragment_data test_data_7 = {
 	.ipv6.vtc = 0x61,
 	.ipv6.tcflow = 0x20,
 	.ipv6.flow = 0x00,
-	.ipv6.len = { 0x00, 0x00 },
+	.ipv6.len = 0,
 	.ipv6.nexthdr = IPPROTO_UDP,
 	.ipv6.hop_limit = 0xff,
 	.ipv6.src = src_sac1_sam00,
@@ -402,7 +404,7 @@ static struct net_fragment_data test_data_8 = {
 	.ipv6.vtc = 0x61,
 	.ipv6.tcflow = 0x20,
 	.ipv6.flow = 0x00,
-	.ipv6.len = { 0x00, 0x00 },
+	.ipv6.len = 0,
 	.ipv6.nexthdr = IPPROTO_UDP,
 	.ipv6.hop_limit = 0xff,
 	.ipv6.src = src_sac1_sam00,
@@ -430,7 +432,7 @@ static int test_fragment(struct net_fragment_data *data)
 
 #if DEBUG > 0
 	printk("length before compression %zd\n", net_pkt_get_len(pkt));
-	net_hexdump_frags("before-compression", pkt);
+	net_hexdump_frags("before-compression", pkt, false);
 #endif
 
 	if (!net_6lo_compress(pkt, data->iphc,
@@ -442,7 +444,7 @@ static int test_fragment(struct net_fragment_data *data)
 #if DEBUG > 0
 	printk("length after compression and fragmentation %zd\n",
 	       net_pkt_get_len(pkt));
-	net_hexdump_frags("after-compression", pkt);
+	net_hexdump_frags("after-compression", pkt, false);
 #endif
 
 	frag = pkt->frags;
@@ -481,7 +483,7 @@ compare:
 #if DEBUG > 0
 	printk("length after reassembly and uncompression %zd\n",
 	       net_pkt_get_len(rxpkt));
-	net_hexdump_frags("after-uncompression", rxpkt);
+	net_hexdump_frags("after-uncompression", rxpkt, false);
 #endif
 
 	if (compare_data(rxpkt, data)) {
@@ -531,4 +533,3 @@ void main(void)
 
 	TC_END_REPORT(((pass != ARRAY_SIZE(tests)) ? TC_FAIL : TC_PASS));
 }
-

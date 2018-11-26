@@ -16,18 +16,24 @@
 #include <pwm.h>
 
 #if defined(CONFIG_SOC_STM32F401XE) || defined(CONFIG_SOC_STM32L476XG)
-#define PWM_DRIVER CONFIG_PWM_STM32_2_DEV_NAME
+#define PWM_DRIVER DT_PWM_STM32_2_DEV_NAME
 #define PWM_CHANNEL 1
 #elif CONFIG_SOC_STM32F103XB
-#define PWM_DRIVER CONFIG_PWM_STM32_1_DEV_NAME
+#define PWM_DRIVER DT_PWM_STM32_1_DEV_NAME
 #define PWM_CHANNEL 1
 #elif defined(CONFIG_SOC_QUARK_SE_C1000) || defined(CONFIG_SOC_QUARK_D2000)
 #define PWM_DRIVER CONFIG_PWM_QMSI_DEV_NAME
 #define PWM_CHANNEL 0
-#elif defined(CONFIG_SOC_FAMILY_NRF5)
-#include <board.h>
+#elif defined(CONFIG_SOC_FAMILY_NRF)
 #define PWM_DRIVER CONFIG_PWM_NRF5_SW_0_DEV_NAME
 #define PWM_CHANNEL LED0_GPIO_PIN
+#elif defined(CONFIG_SOC_ESP32)
+#define PWM_DRIVER CONFIG_PWM_LED_ESP32_DEV_NAME_0
+#define PWM_CHANNEL	21
+#elif defined(PWM_LED0_PWM_CONTROLLER) && defined(PWM_LED0_PWM_CHANNEL)
+/* get the defines from dt (based on alias 'pwm-led0') */
+#define PWM_DRIVER	PWM_LED0_PWM_CONTROLLER
+#define PWM_CHANNEL	PWM_LED0_PWM_CHANNEL
 #else
 #error "Choose supported PWM driver"
 #endif

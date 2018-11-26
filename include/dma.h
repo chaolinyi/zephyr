@@ -10,8 +10,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef _DMA_H_
-#define _DMA_H_
+#ifndef ZEPHYR_INCLUDE_DMA_H_
+#define ZEPHYR_INCLUDE_DMA_H_
 
 #include <kernel.h>
 #include <device.h>
@@ -28,78 +28,17 @@ extern "C" {
  * @{
  */
 
-enum dma_handshake_polarity {
-	HANDSHAKE_POLARITY_HIGH = 0x0,
-	HANDSHAKE_POLARITY_LOW
-};
-
-enum dma_burst_length {
-	BURST_TRANS_LENGTH_1 = 0x0,
-	BURST_TRANS_LENGTH_4,
-	BURST_TRANS_LENGTH_8,
-	BURST_TRANS_LENGTH_16,
-	BURST_TRANS_LENGTH_32,
-	BURST_TRANS_LENGTH_64,
-	BURST_TRANS_LENGTH_128,
-	BURST_TRANS_LENGTH_256
-};
-
-enum dma_transfer_width {
-	TRANS_WIDTH_8 = 0x0,
-	TRANS_WIDTH_16,
-	TRANS_WIDTH_32,
-	TRANS_WIDTH_64,
-	TRANS_WIDTH_128,
-	TRANS_WIDTH_256
-};
-
 enum dma_channel_direction {
 	MEMORY_TO_MEMORY = 0x0,
 	MEMORY_TO_PERIPHERAL,
 	PERIPHERAL_TO_MEMORY
 };
 
-/**
- * @brief DMA Channel Configuration.
- *
- * This defines a single channel configuration on the DMA controller.
- */
-struct dma_channel_config {
-	/* Hardware Interface handshake for peripheral (I2C, SPI, etc) */
-	u32_t handshake_interface;
-	/* Select active  polarity for handshake (low/high) */
-	enum dma_handshake_polarity handshake_polarity;
-	/* DMA transfer direction from mem/peripheral to mem/peripheral */
-	enum dma_channel_direction channel_direction;
-	/* Data item size read from source */
-	enum dma_transfer_width source_transfer_width;
-	/* Data item size written to destination */
-	enum dma_transfer_width destination_transfer_width;
-	/* Number of data items read */
-	enum dma_burst_length source_burst_length;
-	/* Number of data items written */
-	enum dma_burst_length destination_burst_length;
-
-	/* Completed transaction callback */
-	void (*dma_transfer)(struct device *dev, void *data);
-	/* Error callback */
-	void (*dma_error)(struct device *dev, void *data);
-	/* Client callback private data */
-	void *callback_data;
-};
-
-/**
- * @brief DMA transfer Configuration.
- *
- * This defines a single transfer on configured channel of the DMA controller.
- */
-struct dma_transfer_config {
-	/* Total amount of data in bytes to transfer */
-	u32_t block_size;
-	/* Source address for the transaction */
-	u32_t *source_address;
-	/* Destination address */
-	u32_t *destination_address;
+/** Valid values for @a source_addr_adj and @a dest_addr_adj */
+enum dma_addr_adj {
+	DMA_ADDR_ADJ_INCREMENT,
+	DMA_ADDR_ADJ_DECREMENT,
+	DMA_ADDR_ADJ_NO_CHANGE,
 };
 
 /**
@@ -187,6 +126,8 @@ struct dma_block_config {
  *     block_count  is the number of blocks used for block chaining, this
  *     depends on availability of the DMA controller.
  *
+ *     callback_arg  private argument from DMA client.
+ *
  * dma_callback is the callback function pointer. If enabled, callback function
  *              will be invoked at transfer completion or when error happens
  *              (error_code: zero-transfer success, non zero-error happens).
@@ -208,7 +149,8 @@ struct dma_config {
 	u32_t  dest_burst_length :   16;
 	u32_t block_count;
 	struct dma_block_config *head_block;
-	void (*dma_callback)(struct device *dev, u32_t channel,
+	void *callback_arg;
+	void (*dma_callback)(void *callback_arg, u32_t channel,
 			     int error_code);
 };
 
@@ -219,29 +161,19 @@ struct dma_config {
  * public documentation.
  */
 
-typedef int (*dma_api_channel_config)(struct device *dev, u32_t channel,
-				      struct dma_channel_config *config);
-
-typedef int (*dma_api_transfer_config)(struct device *dev, u32_t channel,
-				       struct dma_transfer_config *config);
-
-typedef int (*dma_api_transfer_start)(struct device *dev, u32_t channel);
-
-typedef int (*dma_api_transfer_stop)(struct device *dev, u32_t channel);
-
 typedef int (*dma_api_config)(struct device *dev, u32_t channel,
 			      struct dma_config *config);
+
+typedef int (*dma_api_reload)(struct device *dev, u32_t channel,
+		u32_t src, u32_t dst, size_t size);
 
 typedef int (*dma_api_start)(struct device *dev, u32_t channel);
 
 typedef int (*dma_api_stop)(struct device *dev, u32_t channel);
 
 struct dma_driver_api {
-	dma_api_channel_config channel_config;
-	dma_api_transfer_config transfer_config;
-	dma_api_transfer_start transfer_start;
-	dma_api_transfer_stop transfer_stop;
 	dma_api_config config;
+	dma_api_reload reload;
 	dma_api_start start;
 	dma_api_stop stop;
 };
@@ -263,14 +195,40 @@ struct dma_driver_api {
 static inline int dma_config(struct device *dev, u32_t channel,
 			     struct dma_config *config)
 {
-	const struct dma_driver_api *api = dev->driver_api;
+	const struct dma_driver_api *api =
+		(const struct dma_driver_api *)dev->driver_api;
 
 	return api->config(dev, channel, config);
 }
 
 /**
+ * @brief Reload buffer(s) for a DMA channel
+ *
+ * @param dev     Pointer to the device structure for the driver instance.
+ * @param channel Numeric identification of the channel to configure
+ *                selected channel
+ * @param src     source address for the DMA transfer
+ * @param dst     destination address for the DMA transfer
+ * @param size    size of DMA transfer
+ *
+ * @retval 0 if successful.
+ * @retval Negative errno code if failure.
+ */
+static inline int dma_reload(struct device *dev, u32_t channel,
+		u32_t src, u32_t dst, size_t size)
+{
+	const struct dma_driver_api *api =
+		(const struct dma_driver_api *)dev->driver_api;
+
+	return api->reload(dev, channel, src, dst, size);
+}
+
+/**
  * @brief Enables DMA channel and starts the transfer, the channel must be
  *        configured beforehand.
+ *
+ * Implementations must check the validity of the channel ID passed in and
+ * return -EINVAL if it is invalid.
  *
  * @param dev     Pointer to the device structure for the driver instance.
  * @param channel Numeric identification of the channel where the transfer will
@@ -279,15 +237,21 @@ static inline int dma_config(struct device *dev, u32_t channel,
  * @retval 0 if successful.
  * @retval Negative errno code if failure.
  */
-static inline int dma_start(struct device *dev, u32_t channel)
+__syscall int dma_start(struct device *dev, u32_t channel);
+
+static inline int _impl_dma_start(struct device *dev, u32_t channel)
 {
-	const struct dma_driver_api *api = dev->driver_api;
+	const struct dma_driver_api *api =
+		(const struct dma_driver_api *)dev->driver_api;
 
 	return api->start(dev, channel);
 }
 
 /**
  * @brief Stops the DMA transfer and disables the channel.
+ *
+ * Implementations must check the validity of the channel ID passed in and
+ * return -EINVAL if it is invalid.
  *
  * @param dev     Pointer to the device structure for the driver instance.
  * @param channel Numeric identification of the channel where the transfer was
@@ -296,87 +260,14 @@ static inline int dma_start(struct device *dev, u32_t channel)
  * @retval 0 if successful.
  * @retval Negative errno code if failure.
  */
-static inline int dma_stop(struct device *dev, u32_t channel)
+__syscall int dma_stop(struct device *dev, u32_t channel);
+
+static inline int _impl_dma_stop(struct device *dev, u32_t channel)
 {
-	const struct dma_driver_api *api = dev->driver_api;
+	const struct dma_driver_api *api =
+		(const struct dma_driver_api *)dev->driver_api;
 
 	return api->stop(dev, channel);
-}
-
-/**
- * @brief Configure individual channel for DMA transfer.
- *
- * @param dev Pointer to the device structure for the driver instance.
- * @param channel Numeric identification of the channel to configure
- * @param config Data structure containing the intended configuration for the
- * selected channel
- *
- * @retval 0 If successful.
- * @retval Negative errno code if failure.
- */
-static inline int __deprecated dma_channel_config(struct device *dev,
-			u32_t channel, struct dma_channel_config *config)
-{
-	const struct dma_driver_api *api = dev->driver_api;
-
-	return api->channel_config(dev, channel, config);
-}
-
-/**
- * @brief Configure DMA transfer for a specific channel that has been
- * configured.
- *
- * @param dev Pointer to the device structure for the driver instance.
- * @param channel Numeric identification of the channel to configure
- * @param config Data structure containing transfer configuration for the
- * selected channel
- *
- * @retval 0 If successful.
- * @retval Negative errno code if failure.
- */
-static inline int __deprecated dma_transfer_config(struct device *dev,
-			u32_t channel, struct dma_transfer_config *config)
-{
-	const struct dma_driver_api *api = dev->driver_api;
-
-	return api->transfer_config(dev, channel, config);
-}
-
-/**
- * @brief Enables DMA channel and starts the transfer, the channel must be
- * configured beforehand.
- *
- * @param dev Pointer to the device structure for the driver instance.
- * @param channel Numeric identification of the channel where the transfer will
- * be processed
- *
- * @retval 0 If successful.
- * @retval Negative errno code if failure.
- */
-static inline int __deprecated dma_transfer_start(struct device *dev,
-						  u32_t channel)
-{
-	const struct dma_driver_api *api = dev->driver_api;
-
-	return api->transfer_start(dev, channel);
-}
-
-/**
- * @brief Stops the DMA transfer and disables the channel.
- *
- * @param dev Pointer to the device structure for the driver instance.
- * @param channel Numeric identification of the channel where the transfer was
- * being processed
- *
- * @retval 0 If successful.
- * @retval Negative errno code if failure.
- */
-static inline int __deprecated dma_transfer_stop(struct device *dev,
-						 u32_t channel)
-{
-	const struct dma_driver_api *api = dev->driver_api;
-
-	return api->transfer_stop(dev, channel);
 }
 
 /**
@@ -392,7 +283,7 @@ static inline int __deprecated dma_transfer_stop(struct device *dev,
  *
  * @retval common DMA index to be placed into registers.
  */
-static inline enum dma_burst_length dma_width_index(u32_t size)
+static inline u32_t dma_width_index(u32_t size)
 {
 	/* Check boundaries (max supported width is 32 Bytes) */
 	if (size < 1 || size > 32) {
@@ -421,7 +312,7 @@ static inline enum dma_burst_length dma_width_index(u32_t size)
  *
  * @retval common DMA index to be placed into registers.
  */
-static inline enum dma_burst_length dma_burst_index(u32_t burst)
+static inline u32_t dma_burst_index(u32_t burst)
 {
 	/* Check boundaries (max supported burst length is 256) */
 	if (burst < 1 || burst > 256) {
@@ -445,4 +336,6 @@ static inline enum dma_burst_length dma_burst_index(u32_t burst)
 }
 #endif
 
-#endif /* _DMA_H_ */
+#include <syscalls/dma.h>
+
+#endif /* ZEPHYR_INCLUDE_DMA_H_ */

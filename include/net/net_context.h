@@ -10,12 +10,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef __NET_CONTEXT_H
-#define __NET_CONTEXT_H
+#ifndef ZEPHYR_INCLUDE_NET_NET_CONTEXT_H_
+#define ZEPHYR_INCLUDE_NET_NET_CONTEXT_H_
 
 /**
  * @brief Application network context
  * @defgroup net_context Application network context
+ * @ingroup networking
  * @{
  */
 
@@ -66,8 +67,10 @@ struct net_context;
  * @typedef net_context_recv_cb_t
  * @brief Network data receive callback.
  *
- * @details The recv callback is called after a network data is
- * received.
+ * @details The recv callback is called after a network data packet is
+ * received. This callback is called by RX thread so its stack and execution
+ * context is used here. Keep processing in the callback minimal to reduce the
+ * time spent blocked while handling packets.
  *
  * @param context The context to use.
  * @param pkt Network buffer that is received. If the pkt is not NULL,
@@ -87,8 +90,10 @@ typedef void (*net_context_recv_cb_t)(struct net_context *context,
  * @typedef net_context_send_cb_t
  * @brief Network data send callback.
  *
- * @details The send callback is called after a network data is
- * sent.
+ * @details The send callback is called after a network data packet is sent.
+ * This callback is called by TX thread so its stack and execution context is
+ * used here. Keep processing in the callback minimal to reduce the time spent
+ * blocked while handling packets.
  *
  * @param context The context to use.
  * @param status Value is set to 0 if all data was sent ok, <0 if
@@ -106,9 +111,11 @@ typedef void (*net_context_send_cb_t)(struct net_context *context,
  * @typedef net_tcp_accept_cb_t
  * @brief Accept callback
  *
- * @details The accept callback is called after a successful
- * connection is being established or if there was an error
- * while we were waiting for a connection attempt.
+ * @details The accept callback is called after a successful connection was
+ * established or if there was an error while we were waiting for a connection
+ * attempt. This callback is called by RX thread so its stack and execution
+ * context is used here. Keep processing in the callback minimal to reduce the
+ * time spent blocked while handling packets.
  *
  * @param context The context to use.
  * @param addr The peer address.
@@ -128,6 +135,14 @@ typedef void (*net_tcp_accept_cb_t)(struct net_context *new_context,
  *
  * @details The connect callback is called after a connection is being
  * established.
+ * For TCP connections, this callback is called by RX thread so its stack and
+ * execution context is used here. The callback is called after the TCP
+ * connection was established or if the connection failed. Keep processing in
+ * the callback minimal to reduce the time spent blocked while handling
+ * packets.
+ * For UDP connections, this callback is called immediately by
+ * net_context_connect() function. UDP is a connectionless protocol so the
+ * connection can be thought of being established immediately.
  *
  * @param context The context to use.
  * @param status Status of the connection establishment. This is 0
@@ -168,6 +183,8 @@ typedef struct net_buf_pool *(*net_pkt_get_pool_func_t)(void);
 struct net_tcp;
 
 struct net_conn_handle;
+
+struct tls_context;
 
 /**
  * Note that we do not store the actual source IP address in the context
@@ -223,6 +240,16 @@ struct net_context {
 	net_pkt_get_pool_func_t data_pool;
 #endif /* CONFIG_NET_CONTEXT_NET_PKT_POOL */
 
+#if defined(CONFIG_NET_TCP)
+	/** TCP connection information */
+	struct net_tcp *tcp;
+#endif /* CONFIG_NET_TCP */
+
+#if defined(CONFIG_NET_APP)
+	/** net_app connection information */
+	void *net_app;
+#endif /* CONFIG_NET_APP */
+
 #if defined(CONFIG_NET_CONTEXT_SYNC_RECV)
 	/**
 	 * Semaphore to signal synchronous recv call completion.
@@ -230,24 +257,37 @@ struct net_context {
 	struct k_sem recv_data_wait;
 #endif /* CONFIG_NET_CONTEXT_SYNC_RECV */
 
-	/** Network interface assigned to this context */
-	u8_t iface;
-
-	/** Flags for the context */
-	u8_t flags;
-
-#if defined(CONFIG_NET_TCP)
-	/** TCP connection information */
-	struct net_tcp *tcp;
-#endif /* CONFIG_NET_TCP */
-
 #if defined(CONFIG_NET_SOCKETS)
 	/** Per-socket packet or connection queues */
 	union {
 		struct k_fifo recv_q;
 		struct k_fifo accept_q;
 	};
+
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+	/** TLS context information */
+	struct tls_context *tls;
+#endif /* CONFIG_NET_SOCKETS_SOCKOPT_TLS */
 #endif /* CONFIG_NET_SOCKETS */
+
+#if defined(CONFIG_NET_OFFLOAD)
+	/** context for use by offload drivers */
+	void *offload_context;
+#endif /* CONFIG_NET_OFFLOAD */
+
+	/** Option values */
+	struct {
+#if defined(CONFIG_NET_CONTEXT_PRIORITY)
+		/** Priority of the network data sent via this net_context */
+		u8_t priority;
+#endif
+	} options;
+
+	/** Network interface assigned to this context */
+	u8_t iface;
+
+	/** Flags for the context */
+	u8_t flags;
 };
 
 static inline bool net_context_is_used(struct net_context *context)
@@ -274,8 +314,9 @@ enum net_context_state net_context_get_state(struct net_context *context)
 {
 	NET_ASSERT(context);
 
-	return (context->flags >> NET_CONTEXT_STATE_SHIFT) &
-		NET_CONTEXT_STATE_MASK;
+	return (enum net_context_state)
+		((context->flags >> NET_CONTEXT_STATE_SHIFT) &
+		NET_CONTEXT_STATE_MASK);
 }
 
 /**
@@ -527,6 +568,58 @@ int net_context_ref(struct net_context *context);
 int net_context_unref(struct net_context *context);
 
 /**
+ * @brief Create IPv4 packet in provided net_pkt from context
+ *
+ * @param context Network context for a connection
+ * @param pkt Network packet
+ * @param src Source address, or NULL to choose a default
+ * @param dst Destination IPv4 address
+ *
+ * @return Return network packet that contains the IPv4 packet.
+ */
+#if defined(CONFIG_NET_IPV4)
+struct net_pkt *net_context_create_ipv4(struct net_context *context,
+					struct net_pkt *pkt,
+					const struct in_addr *src,
+					const struct in_addr *dst);
+#else
+static inline
+struct net_pkt *net_context_create_ipv4(struct net_context *context,
+					struct net_pkt *pkt,
+					const struct in_addr *src,
+					const struct in_addr *dst)
+{
+	return NULL;
+}
+#endif /* CONFIG_NET_IPV4 */
+
+/**
+ * @brief Create IPv6 packet in provided net_pkt from context
+ *
+ * @param context Network context for a connection
+ * @param pkt Network packet
+ * @param src Source address, or NULL to choose a default from context
+ * @param dst Destination IPv6 address
+ *
+ * @return Return network packet that contains the IPv6 packet.
+ */
+#if defined(CONFIG_NET_IPV6)
+struct net_pkt *net_context_create_ipv6(struct net_context *context,
+					struct net_pkt *pkt,
+					const struct in6_addr *src,
+					const struct in6_addr *dst);
+#else
+static inline
+struct net_pkt *net_context_create_ipv6(struct net_context *context,
+					struct net_pkt *pkt,
+					const struct in6_addr *src,
+					const struct in6_addr *dst)
+{
+	return NULL;
+}
+#endif /* CONFIG_NET_IPV6 */
+
+/**
  * @brief Assign a socket a local address.
  *
  * @details This is similar as BSD bind() function.
@@ -559,7 +652,7 @@ int net_context_listen(struct net_context *context,
  *
  * @details          The net_context_connect function creates a network
  *                   connection to the host specified by addr. After the
- *                   connection is established, the user supplied callback (cb)
+ *                   connection is established, the user-supplied callback (cb)
  *                   is executed. cb is called even if the timeout was set to
  *                   K_FOREVER. cb is not called if the timeout expires.
  *                   For datagram sockets (SOCK_DGRAM), this function only sets
@@ -600,17 +693,17 @@ int net_context_connect(struct net_context *context,
  * If the timeout is set to K_FOREVER, the function will wait
  * until the connection is established. Timeout value > 0, will wait as
  * many ms.
- * After the connection is established a caller supplied callback is called.
+ * After the connection is established a caller-supplied callback is called.
  * The callback is called even if timeout was set to K_FOREVER, the
  * callback is called before this function will return in this case.
  * The callback is not called if the timeout expires.
  * This is similar as BSD accept() function.
  *
  * @param context The context to use.
- * @param cb Caller supplied callback function.
+ * @param cb Caller-supplied callback function.
  * @param timeout Timeout for the connection. Possible values
  * are K_FOREVER, K_NO_WAIT, >0.
- * @param user_data Caller supplied user data.
+ * @param user_data Caller-supplied user data.
  *
  * @return 0 if ok, < 0 if error
  */
@@ -627,7 +720,7 @@ int net_context_accept(struct net_context *context,
  * is set to K_NO_WAIT. If the timeout is set to K_FOREVER, the function
  * will wait until the network buffer is sent. Timeout value > 0 will
  * wait as many ms. After the network buffer is sent,
- * a caller supplied callback is called. The callback is called even
+ * a caller-supplied callback is called. The callback is called even
  * if timeout was set to K_FOREVER, the callback is called
  * before this function will return in this case. The callback is not
  * called if the timeout expires. For context of type SOCK_DGRAM,
@@ -636,11 +729,11 @@ int net_context_accept(struct net_context *context,
  * This is similar as BSD send() function.
  *
  * @param pkt The network buffer to send.
- * @param cb Caller supplied callback function.
+ * @param cb Caller-supplied callback function.
  * @param timeout Timeout for the connection. Possible values
  * are K_FOREVER, K_NO_WAIT, >0.
  * @param token Caller specified value that is passed as is to callback.
- * @param user_data Caller supplied user data.
+ * @param user_data Caller-supplied user data.
  *
  * @return 0 if ok, < 0 if error
  */
@@ -659,7 +752,7 @@ int net_context_send(struct net_pkt *pkt,
  * if the timeout is set to K_NO_WAIT. If the timeout is set to K_FOREVER,
  * the function will wait until the network buffer is sent. Timeout
  * value > 0 will wait as many ms. After the network buffer
- * is sent, a caller supplied callback is called. The callback is called
+ * is sent, a caller-supplied callback is called. The callback is called
  * even if timeout was set to K_FOREVER, the callback is called
  * before this function will return. The callback is not called if the
  * timeout expires.
@@ -669,11 +762,11 @@ int net_context_send(struct net_pkt *pkt,
  * @param dst_addr Destination address. This will override the address
  * already set in network buffer.
  * @param addrlen Length of the address.
- * @param cb Caller supplied callback function.
+ * @param cb Caller-supplied callback function.
  * @param timeout Timeout for the connection. Possible values
  * are K_FOREVER, K_NO_WAIT, >0.
  * @param token Caller specified value that is passed as is to callback.
- * @param user_data Caller supplied user data.
+ * @param user_data Caller-supplied user data.
  *
  * @return 0 if ok, < 0 if error
  */
@@ -698,7 +791,7 @@ int net_context_sendto(struct net_pkt *pkt,
  * This function will return immediately if the timeout is set to K_NO_WAIT.
  * If the timeout is set to K_FOREVER, the function will wait until the
  * network buffer is received. Timeout value > 0 will wait as many ms.
- * After the network buffer is received, a caller supplied callback is
+ * After the network buffer is received, a caller-supplied callback is
  * called. The callback is called even if timeout was set to K_FOREVER,
  * the callback is called before this function will return in this case.
  * The callback is not called if the timeout expires. The timeout functionality
@@ -709,15 +802,15 @@ int net_context_sendto(struct net_pkt *pkt,
  * This is similar as BSD recv() function.
  * Note that net_context_bind() should be called before net_context_recv().
  * Default random port number is assigned to local port. Only bind() will
- * updates connection information from context. If recv() is called before
+ * update connection information from context. If recv() is called before
  * bind() call, it may refuse to bind to a context which already has
  * a connection associated.
  *
  * @param context The network context to use.
- * @param cb Caller supplied callback function.
- * @param timeout Caller supplied timeout. Possible values
+ * @param cb Caller-supplied callback function.
+ * @param timeout Caller-supplied timeout. Possible values
  * are K_FOREVER, K_NO_WAIT, >0.
- * @param user_data Caller supplied user data.
+ * @param user_data Caller-supplied user data.
  *
  * @return 0 if ok, < 0 if error
  */
@@ -725,6 +818,61 @@ int net_context_recv(struct net_context *context,
 		     net_context_recv_cb_t cb,
 		     s32_t timeout,
 		     void *user_data);
+
+/**
+ * @brief Update TCP receive window for context.
+ *
+ * @details This function should be used by an application which
+ * doesn't fully process incoming data in its receive callback,
+ * but for example, queues it. In this case, receive callback
+ * should decrease the window (call this function with a negative
+ * value) by the size of queued data, and function(s) which dequeue
+ * data - with positive value corresponding to the dequeued size.
+ * For example, if receive callback gets a packet with the data
+ * size of 256 and queues it, it should call this function with
+ * delta of -256. If a function extracts 10 bytes of the queued
+ * data, it should call it with delta of 10.
+ *
+ * @param context The TCP network context to use.
+ * @param delta Size, in bytes, by which to increase TCP receive
+ * window (negative value to decrease).
+ *
+ * @return 0 if ok, < 0 if error
+ */
+int net_context_update_recv_wnd(struct net_context *context,
+				s32_t delta);
+
+enum net_context_option {
+	NET_OPT_PRIORITY = 1,
+};
+
+/**
+ * @brief Set an connection option for this context.
+ *
+ * @param context The network context to use.
+ * @param option Option to set
+ * @param value Option value
+ * @param len Option length
+ *
+ * @return 0 if ok, <0 if error
+ */
+int net_context_set_option(struct net_context *context,
+			   enum net_context_option option,
+			   const void *value, size_t len);
+
+/**
+ * @brief Get connection option value for this context.
+ *
+ * @param context The network context to use.
+ * @param option Option to set
+ * @param value Option value
+ * @param len Option length (returned to caller)
+ *
+ * @return 0 if ok, <0 if error
+ */
+int net_context_get_option(struct net_context *context,
+			   enum net_context_option option,
+			   void *value, size_t *len);
 
 /**
  * @typedef net_context_cb_t
@@ -739,15 +887,22 @@ typedef void (*net_context_cb_t)(struct net_context *context, void *user_data);
  * @brief Go through all the network connections and call callback
  * for each network context.
  *
- * @param cb User supplied callback function to call.
+ * @param cb User-supplied callback function to call.
  * @param user_data User specified data.
  */
 void net_context_foreach(net_context_cb_t cb, void *user_data);
 
 /**
- * @brief Create network buffer pool that is used by the IP stack
- * to allocate network buffers that are used by the context when
- * sending data to network.
+ * @brief Set custom network buffer pools for context send operations
+ *
+ * Set custom network buffer pools used by the IP stack to allocate
+ * network buffers used by the context when sending data to the
+ * network. Using dedicated buffers may help make send operations on
+ * a given context more reliable, e.g. not be subject to buffer
+ * starvation due to operations on other network contexts. Buffer pools
+ * are set per context, but several contexts may share the same buffers.
+ * Note that there's no support for per-context custom receive packet
+ * pools.
  *
  * @param context Context that will use the given net_buf pools.
  * @param tx_pool Pointer to the function that will return TX pool
@@ -763,8 +918,6 @@ static inline void net_context_setup_pools(struct net_context *context,
 					   net_pkt_get_pool_func_t data_pool)
 {
 	NET_ASSERT(context);
-	NET_ASSERT(tx_slab);
-	NET_ASSERT(data_pool);
 
 	context->tx_slab = tx_slab;
 	context->data_pool = data_pool;
@@ -781,4 +934,4 @@ static inline void net_context_setup_pools(struct net_context *context,
  * @}
  */
 
-#endif /* __NET_CONTEXT_H */
+#endif /* ZEPHYR_INCLUDE_NET_NET_CONTEXT_H_ */

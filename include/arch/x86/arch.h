@@ -11,27 +11,31 @@
  * by the generic kernel interface header (include/arch/cpu.h)
  */
 
-#ifndef _ARCH_IFACE_H
-#define _ARCH_IFACE_H
+#ifndef ZEPHYR_INCLUDE_ARCH_X86_ARCH_H_
+#define ZEPHYR_INCLUDE_ARCH_X86_ARCH_H_
 
 #include <irq.h>
 #include <arch/x86/irq_controller.h>
 #include <kernel_arch_thread.h>
 #include <generated_dts_board.h>
+#include <mmustructs.h>
+#include <stdbool.h>
 
 #ifndef _ASMLANGUAGE
 #include <arch/x86/asm_inline.h>
 #include <arch/x86/addr_types.h>
+#include <arch/x86/segmentation.h>
 #endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* APIs need to support non-byte addressable architectures */
-
-#define OCTET_TO_SIZEOFUNIT(X) (X)
-#define SIZEOFUNIT_TO_OCTET(X) (X)
+/* GDT layout */
+#define CODE_SEG	0x08
+#define DATA_SEG	0x10
+#define MAIN_TSS	0x18
+#define DF_TSS		0x20
 
 /**
  * Macro used internally by NANO_CPU_INT_REGISTER and NANO_CPU_INT_REGISTER_ASM.
@@ -39,17 +43,24 @@ extern "C" {
  */
 #define MK_ISR_NAME(x) __isr__##x
 
+#define Z_DYN_STUB_SIZE			4
+#define Z_DYN_STUB_OFFSET		0
+#define Z_DYN_STUB_LONG_JMP_EXTRA_SIZE	3
+#define Z_DYN_STUB_PER_BLOCK		32
+
+
 #ifndef _ASMLANGUAGE
 
 #ifdef CONFIG_INT_LATENCY_BENCHMARK
 void _int_latency_start(void);
 void _int_latency_stop(void);
 #else
-#define _int_latency_start()  do { } while (0)
-#define _int_latency_stop()   do { } while (0)
+#define _int_latency_start()  do { } while (false)
+#define _int_latency_stop()   do { } while (false)
 #endif
 
 /* interrupt/exception/error related definitions */
+
 
 /*
  * The TCS must be aligned to the same boundary as that used by the floating
@@ -76,6 +87,12 @@ typedef struct s_isrList {
 	unsigned int    vec;
 	/** Privilege level associated with ISR/stub */
 	unsigned int    dpl;
+
+	/** If nonzero, specifies a TSS segment selector. Will configure
+	 * a task gate instead of an interrupt gate. fnc parameter will be
+	 * ignored
+	 */
+	unsigned int	tss;
 } ISR_LIST;
 
 
@@ -106,8 +123,39 @@ typedef struct s_isrList {
 #define NANO_CPU_INT_REGISTER(r, n, p, v, d) \
 	 static ISR_LIST __attribute__((section(".intList"))) \
 			 __attribute__((used)) MK_ISR_NAME(r) = \
-			{&r, n, p, v, d}
+			{ \
+				.fnc = &(r), \
+				.irq = (n), \
+				.priority = (p), \
+				.vec = (v), \
+				.dpl = (d), \
+				.tss = 0 \
+			}
 
+/**
+ * @brief Connect an IA hardware task to an interrupt vector
+ *
+ * This is very similar to NANO_CPU_INT_REGISTER but instead of connecting
+ * a handler function, the interrupt will induce an IA hardware task
+ * switch to another hardware task instead.
+ *
+ * @param tss_p GDT/LDT segment selector for the TSS representing the task
+ * @param irq_p IRQ number
+ * @param priority_p IRQ priority
+ * @param vec_p Interrupt vector
+ * @param dpl_p Descriptor privilege level
+ */
+#define _X86_IDT_TSS_REGISTER(tss_p, irq_p, priority_p, vec_p, dpl_p) \
+	static ISR_LIST __attribute__((section(".intList"))) \
+			__attribute__((used)) MK_ISR_NAME(r) = \
+			{ \
+				.fnc = NULL, \
+				.irq = (irq_p), \
+				.priority = (priority_p), \
+				.vec = (vec_p), \
+				.dpl = (dpl_p), \
+				.tss = (tss_p) \
+			}
 
 /**
  * Code snippets for populating the vector ID and priority into the intList
@@ -172,6 +220,7 @@ typedef struct s_isrList {
 		".long %c[priority]\n\t"	/* ISR_LIST.priority */ \
 		".long %c[vector]\n\t"		/* ISR_LIST.vec */ \
 		".long 0\n\t"			/* ISR_LIST.dpl */ \
+		".long 0\n\t"			/* ISR_LIST.tss */ \
 		".popsection\n\t" \
 		".pushsection .text.irqstubs\n\t" \
 		".global %c[isr]_irq%c[irq]_stub\n\t" \
@@ -225,13 +274,13 @@ extern unsigned char _irq_to_interrupt_vector[];
 extern void _arch_irq_direct_pm(void);
 #define _ARCH_ISR_DIRECT_PM() _arch_irq_direct_pm()
 #else
-#define _ARCH_ISR_DIRECT_PM() do { } while (0)
+#define _ARCH_ISR_DIRECT_PM() do { } while (false)
 #endif
 
 #define _ARCH_ISR_DIRECT_HEADER() _arch_isr_direct_header()
 #define _ARCH_ISR_DIRECT_FOOTER(swap) _arch_isr_direct_footer(swap)
 
-/* FIXME prefer these inline, but see ZEP-1595 */
+/* FIXME prefer these inline, but see GH-3056 */
 extern void _arch_isr_direct_header(void);
 extern void _arch_isr_direct_footer(int maybe_swap);
 
@@ -275,6 +324,17 @@ typedef struct nanoEsf {
 	unsigned int eflags;
 } NANO_ESF;
 
+
+struct _x86_syscall_stack_frame {
+	u32_t eip;
+	u32_t cs;
+	u32_t eflags;
+
+	/* These are only present if cs = USER_CODE_SEG */
+	u32_t esp;
+	u32_t ss;
+};
+
 /**
  * @brief "interrupt stack frame" (ISF)
  *
@@ -291,12 +351,6 @@ typedef struct nanoEsf {
  */
 
 typedef struct nanoIsf {
-#ifdef CONFIG_DEBUG_INFO
-	unsigned int esp;
-	unsigned int ebp;
-	unsigned int ebx;
-	unsigned int esi;
-#endif /* CONFIG_DEBUG_INFO */
 	unsigned int edi;
 	unsigned int ecx;
 	unsigned int edx;
@@ -319,8 +373,6 @@ typedef struct nanoIsf {
 #define _NANO_ERR_PAGE_FAULT		 (1)
 /** General protection fault */
 #define _NANO_ERR_GEN_PROT_FAULT	 (2)
-/** Invalid task exit */
-#define _NANO_ERR_INVALID_TASK_EXIT  (3)
 /** Stack corruption detected */
 #define _NANO_ERR_STACK_CHK_FAIL	 (4)
 /** Kernel Allocation Failure */
@@ -337,8 +389,8 @@ typedef struct nanoIsf {
 /**
  * @brief Disable all interrupts on the CPU (inline)
  *
- * This routine disables interrupts.  It can be called from either interrupt,
- * task or fiber level.  This routine returns an architecture-dependent
+ * This routine disables interrupts.  It can be called from either interrupt
+ * or thread level.  This routine returns an architecture-dependent
  * lock-out key representing the "interrupt disable state" prior to the call;
  * this key can be passed to irq_unlock() to re-enable interrupts.
  *
@@ -356,7 +408,7 @@ typedef struct nanoIsf {
  * thread executes, or while the system is idle.
  *
  * The "interrupt disable state" is an attribute of a thread.  Thus, if a
- * fiber or task disables interrupts and subsequently invokes a kernel
+ * thread disables interrupts and subsequently invokes a kernel
  * routine that causes the calling thread to block, the interrupt
  * disable state will be restored when the thread is later rescheduled
  * for execution.
@@ -384,7 +436,7 @@ static ALWAYS_INLINE unsigned int _arch_irq_lock(void)
  * is an architecture-dependent lock-out key that is returned by a previous
  * invocation of irq_lock().
  *
- * This routine can be called from either interrupt, task or fiber level.
+ * This routine can be called from either interrupt or thread level.
  *
  * @return N/A
  *
@@ -425,6 +477,8 @@ extern void	_arch_irq_disable(unsigned int irq);
  * @{
  */
 
+struct k_thread;
+
 /**
  * @brief Enable preservation of floating point context information.
  *
@@ -454,7 +508,7 @@ extern void	_arch_irq_disable(unsigned int irq);
  *
  * @return N/A
  */
-extern void k_float_enable(k_tid_t thread, unsigned int options);
+extern void k_float_enable(struct k_thread *thread, unsigned int options);
 
 /**
  * @brief Disable preservation of floating point context information.
@@ -470,7 +524,7 @@ extern void k_float_enable(k_tid_t thread, unsigned int options);
  *
  * @return N/A
  */
-extern void k_float_disable(k_tid_t thread);
+extern void k_float_disable(struct k_thread *thread);
 
 /**
  * @}
@@ -492,25 +546,81 @@ extern FUNC_NORETURN void _SysFatalErrorHandler(unsigned int reason,
 						const NANO_ESF * pEsf);
 
 
-/* All thread stacks, regardless of whether owned by application or kernel,
- * go in the .stacks input section, which will end up in the kernel's
- * noinit.
+#ifdef CONFIG_X86_ENABLE_TSS
+extern struct task_state_segment _main_tss;
+#endif
+
+#if defined(CONFIG_HW_STACK_PROTECTION) && defined(CONFIG_USERSPACE)
+/* With both hardware stack protection and userspace enabled, stacks are
+ * arranged as follows:
+ *
+ * High memory addresses
+ * +---------------+
+ * | Thread stack  |
+ * +---------------+
+ * | Kernel stack  |
+ * +---------------+
+ * | Guard page    |
+ * +---------------+
+ * Low Memory addresses
+ *
+ * Kernel stacks are fixed at 4K. All the pages containing the thread stack
+ * are marked as user-accessible.
+ * All threads start in supervisor mode, and the kernel stack/guard page
+ * are both marked non-present in the MMU.
+ * If a thread drops down to user mode, the kernel stack page will be marked
+ * as present, supervior-only, and the _main_tss.esp0 field updated to point
+ * to the top of it.
+ * All context switches will save/restore the esp0 field in the TSS.
  */
+#define _STACK_GUARD_SIZE	(MMU_PAGE_SIZE * 2)
+#define _STACK_BASE_ALIGN	MMU_PAGE_SIZE
+#elif defined(CONFIG_HW_STACK_PROTECTION) || defined(CONFIG_USERSPACE)
+/* If only one of HW stack protection or userspace is enabled, then the
+ * stack will be preceded by one page which is a guard page or a kernel mode
+ * stack, respectively.
+ */
+#define _STACK_GUARD_SIZE	MMU_PAGE_SIZE
+#define _STACK_BASE_ALIGN	MMU_PAGE_SIZE
+#else /* Neither feature */
+#define _STACK_GUARD_SIZE	0
+#define _STACK_BASE_ALIGN	STACK_ALIGN
+#endif
+
+#ifdef CONFIG_USERSPACE
+/* If user mode enabled, expand any stack size to fill a page since that is
+ * the access control granularity and we don't want other kernel data to
+ * unintentionally fall in the latter part of the page
+ */
+#define _STACK_SIZE_ALIGN	MMU_PAGE_SIZE
+#else
+#define _STACK_SIZE_ALIGN	1
+#endif
 
 #define _ARCH_THREAD_STACK_DEFINE(sym, size) \
-	char _GENERIC_SECTION(.stacks) __aligned(STACK_ALIGN) sym[size]
+	struct _k_thread_stack_element __kernel_noinit \
+		__aligned(_STACK_BASE_ALIGN) \
+		sym[ROUND_UP((size), _STACK_SIZE_ALIGN) + _STACK_GUARD_SIZE]
+
+#define _ARCH_THREAD_STACK_LEN(size) \
+		(ROUND_UP((size), \
+			  max(_STACK_BASE_ALIGN, _STACK_SIZE_ALIGN)) + \
+		_STACK_GUARD_SIZE)
 
 #define _ARCH_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
-	char _GENERIC_SECTION(.stacks) __aligned(STACK_ALIGN) sym[nmemb][size]
+	struct _k_thread_stack_element __kernel_noinit \
+		__aligned(_STACK_BASE_ALIGN) \
+		sym[nmemb][_ARCH_THREAD_STACK_LEN(size)]
 
 #define _ARCH_THREAD_STACK_MEMBER(sym, size) \
-	char __aligned(STACK_ALIGN) sym[size]
+	struct _k_thread_stack_element __aligned(_STACK_BASE_ALIGN) \
+		sym[ROUND_UP((size), _STACK_SIZE_ALIGN) + _STACK_GUARD_SIZE]
 
 #define _ARCH_THREAD_STACK_SIZEOF(sym) \
-	sizeof(sym)
+	(sizeof(sym) - _STACK_GUARD_SIZE)
 
 #define _ARCH_THREAD_STACK_BUFFER(sym) \
-	sym
+	((char *)((sym) + _STACK_GUARD_SIZE))
 
 #if CONFIG_X86_KERNEL_OOPS
 #define _ARCH_EXCEPT(reason_p) do { \
@@ -521,11 +631,61 @@ extern FUNC_NORETURN void _SysFatalErrorHandler(unsigned int reason,
 		: [vector] "i" (CONFIG_X86_KERNEL_OOPS_VECTOR), \
 		  [reason] "i" (reason_p)); \
 	CODE_UNREACHABLE; \
-} while (0)
-#else
+} while (false)
+#endif
+
 /** Dummy ESF for fatal errors that would otherwise not have an ESF */
 extern const NANO_ESF _default_esf;
-#endif /* CONFIG_X86_KERNEL_OOPS */
+
+#ifdef CONFIG_X86_MMU
+/* Linker variable. It is needed to access the start of the Page directory */
+
+
+#ifdef CONFIG_X86_PAE_MODE
+extern u64_t __mmu_tables_start;
+#define X86_MMU_PDPT ((struct x86_mmu_page_directory_pointer *)\
+		      (u32_t *)(void *)&__mmu_tables_start)
+#else
+extern u32_t __mmu_tables_start;
+#define X86_MMU_PD ((struct x86_mmu_page_directory *)\
+		    (void *)&__mmu_tables_start)
+#endif
+
+
+/**
+ * @brief Fetch page table flags for a particular page
+ *
+ * Given a memory address, return the flags for the containing page's
+ * PDE and PTE entries. Intended for debugging.
+ *
+ * @param addr Memory address to example
+ * @param pde_flags Output parameter for page directory entry flags
+ * @param pte_flags Output parameter for page table entry flags
+ */
+void _x86_mmu_get_flags(void *addr,
+			x86_page_entry_data_t *pde_flags,
+			x86_page_entry_data_t *pte_flags);
+
+
+/**
+ * @brief set flags in the MMU page tables
+ *
+ * Modify bits in the existing page tables for a particular memory
+ * range, which must be page-aligned
+ *
+ * @param ptr Starting memory address which must be page-aligned
+ * @param size Size of the region, must be page size multiple
+ * @param flags Value of bits to set in the page table entries
+ * @param mask Mask indicating which particular bits in the page table entries to
+ *	 modify
+ */
+
+void _x86_mmu_set_flags(void *ptr,
+			size_t size,
+			x86_page_entry_data_t flags,
+			x86_page_entry_data_t mask);
+
+#endif /* CONFIG_X86_MMU */
 
 #endif /* !_ASMLANGUAGE */
 
@@ -540,4 +700,4 @@ extern const NANO_ESF _default_esf;
 }
 #endif
 
-#endif /* _ARCH_IFACE_H */
+#endif /* ZEPHYR_INCLUDE_ARCH_X86_ARCH_H_ */

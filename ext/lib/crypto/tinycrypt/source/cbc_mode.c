@@ -1,7 +1,7 @@
 /* cbc_mode.c - TinyCrypt implementation of CBC mode encryption & decryption */
 
 /*
- *  Copyright (C) 2015 by Intel Corporation, All Rights Reserved.
+ *  Copyright (C) 2017 by Intel Corporation, All Rights Reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
@@ -34,13 +34,13 @@
 #include <tinycrypt/constants.h>
 #include <tinycrypt/utils.h>
 
-int32_t tc_cbc_mode_encrypt(uint8_t *out, uint32_t outlen, const uint8_t *in,
-			    uint32_t inlen, const uint8_t *iv,
+int tc_cbc_mode_encrypt(uint8_t *out, unsigned int outlen, const uint8_t *in,
+			    unsigned int inlen, const uint8_t *iv,
 			    const TCAesKeySched_t sched)
 {
 
 	uint8_t buffer[TC_AES_BLOCK_SIZE];
-	uint32_t n, m;
+	unsigned int n, m;
 
 	/* input sanity check: */
 	if (out == (uint8_t *) 0 ||
@@ -74,13 +74,14 @@ int32_t tc_cbc_mode_encrypt(uint8_t *out, uint32_t outlen, const uint8_t *in,
 	return TC_CRYPTO_SUCCESS;
 }
 
-int32_t tc_cbc_mode_decrypt(uint8_t *out, uint32_t outlen, const uint8_t *in,
-			    uint32_t inlen, const uint8_t *iv,
+int tc_cbc_mode_decrypt(uint8_t *out, unsigned int outlen, const uint8_t *in,
+			    unsigned int inlen, const uint8_t *iv,
 			    const TCAesKeySched_t sched)
 {
+
 	uint8_t buffer[TC_AES_BLOCK_SIZE];
 	const uint8_t *p;
-	uint32_t n, m;
+	unsigned int n, m;
 
 	/* sanity check the inputs */
 	if (out == (uint8_t *) 0 ||
@@ -90,7 +91,7 @@ int32_t tc_cbc_mode_decrypt(uint8_t *out, uint32_t outlen, const uint8_t *in,
 	    outlen == 0 ||
 	    (inlen % TC_AES_BLOCK_SIZE) != 0 ||
 	    (outlen % TC_AES_BLOCK_SIZE) != 0 ||
-	    outlen != inlen - TC_AES_BLOCK_SIZE) {
+	    outlen != inlen) {
 		return TC_CRYPTO_FAIL;
 	}
 
@@ -100,7 +101,7 @@ int32_t tc_cbc_mode_decrypt(uint8_t *out, uint32_t outlen, const uint8_t *in,
 	 * that would not otherwise be possible.
 	 */
 	p = iv;
-	for (n = m = 0; n < inlen; ++n) {
+	for (n = m = 0; n < outlen; ++n) {
 		if ((n % TC_AES_BLOCK_SIZE) == 0) {
 			(void)tc_aes_decrypt(buffer, in, sched);
 			in += TC_AES_BLOCK_SIZE;

@@ -7,8 +7,7 @@
 
 menuconfig UART_MCUX_LPSCI
 	bool "MCUX LPSCI driver"
-	depends on HAS_MCUX && HAS_LPSCI
-	default n
+	depends on HAS_MCUX_LPSCI && CLOCK_CONTROL
 	select SERIAL_HAS_DRIVER
 	select SERIAL_SUPPORT_INTERRUPT
 	help
@@ -18,7 +17,6 @@ if UART_MCUX_LPSCI
 
 menuconfig UART_MCUX_LPSCI_0
 	bool "UART 0"
-	default n
 	help
 	  Enable UART 0.
 

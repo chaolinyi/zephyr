@@ -5,8 +5,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef __BT_HCI_H
-#define __BT_HCI_H
+#ifndef ZEPHYR_INCLUDE_BLUETOOTH_HCI_H_
+#define ZEPHYR_INCLUDE_BLUETOOTH_HCI_H_
 
 #include <toolchain.h>
 #include <zephyr/types.h>
@@ -18,22 +18,33 @@
 extern "C" {
 #endif
 
+/* Company Identifiers (see Bluetooth Assigned Numbers) */
+#define BT_COMP_ID_LF           0x05f1
+
 #define BT_ADDR_LE_PUBLIC       0x00
 #define BT_ADDR_LE_RANDOM       0x01
 #define BT_ADDR_LE_PUBLIC_ID    0x02
 #define BT_ADDR_LE_RANDOM_ID    0x03
 
+/* Special own address types for LL privacy (used in adv & scan parameters) */
+#define BT_HCI_OWN_ADDR_RPA_OR_PUBLIC  0x02
+#define BT_HCI_OWN_ADDR_RPA_OR_RANDOM  0x03
+
+/** Bluetooth Device Address */
 typedef struct {
 	u8_t  val[6];
 } bt_addr_t;
 
+/** Bluetooth LE Device Address */
 typedef struct {
 	u8_t      type;
 	bt_addr_t a;
 } bt_addr_le_t;
 
-#define BT_ADDR_ANY     (&(bt_addr_t) {{0, 0, 0, 0, 0, 0} })
-#define BT_ADDR_LE_ANY  (&(bt_addr_le_t) { 0, { {0, 0, 0, 0, 0, 0} } })
+#define BT_ADDR_ANY     (&(bt_addr_t) { { 0, 0, 0, 0, 0, 0 } })
+#define BT_ADDR_NONE    (&(bt_addr_t) { \
+			 { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } })
+#define BT_ADDR_LE_ANY  (&(bt_addr_le_t) { 0, { { 0, 0, 0, 0, 0, 0 } } })
 #define BT_ADDR_LE_NONE (&(bt_addr_le_t) { 0, \
 			 { { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } } })
 
@@ -57,14 +68,13 @@ static inline void bt_addr_le_copy(bt_addr_le_t *dst, const bt_addr_le_t *src)
 	memcpy(dst, src, sizeof(*dst));
 }
 
-#define BT_ADDR_IS_RPA(addr)     (((addr)->val[5] & 0xc0) == 0x40)
-#define BT_ADDR_IS_NRPA(addr)    (((addr)->val[5] & 0xc0) == 0x00)
-#define BT_ADDR_IS_STATIC(addr)  (((addr)->val[5] & 0xc0) == 0xc0)
+#define BT_ADDR_IS_RPA(a)     (((a)->val[5] & 0xc0) == 0x40)
+#define BT_ADDR_IS_NRPA(a)    (((a)->val[5] & 0xc0) == 0x00)
+#define BT_ADDR_IS_STATIC(a)  (((a)->val[5] & 0xc0) == 0xc0)
 
-#define BT_ADDR_SET_RPA(addr)    ((addr)->val[5] = \
-					(((addr)->val[5] & 0x3f) | 0x40))
-#define BT_ADDR_SET_NRPA(addr)   ((addr)->val[5] &= 0x3f)
-#define BT_ADDR_SET_STATIC(addr) ((addr)->val[5] |= 0xc0)
+#define BT_ADDR_SET_RPA(a)    ((a)->val[5] = (((a)->val[5] & 0x3f) | 0x40))
+#define BT_ADDR_SET_NRPA(a)   ((a)->val[5] &= 0x3f)
+#define BT_ADDR_SET_STATIC(a) ((a)->val[5] |= 0xc0)
 
 int bt_addr_le_create_nrpa(bt_addr_le_t *addr);
 int bt_addr_le_create_static(bt_addr_le_t *addr);
@@ -87,25 +97,47 @@ static inline bool bt_addr_le_is_identity(const bt_addr_le_t *addr)
 	return BT_ADDR_IS_STATIC(&addr->a);
 }
 
+#define BT_ENC_KEY_SIZE_MIN                     0x07
+#define BT_ENC_KEY_SIZE_MAX                     0x10
+
 /* HCI Error Codes */
 #define BT_HCI_ERR_SUCCESS                      0x00
 #define BT_HCI_ERR_UNKNOWN_CMD                  0x01
 #define BT_HCI_ERR_UNKNOWN_CONN_ID              0x02
+#define BT_HCI_ERR_HW_FAILURE                   0x03
+#define BT_HCI_ERR_PAGE_TIMEOUT                 0x04
 #define BT_HCI_ERR_AUTHENTICATION_FAIL          0x05
 #define BT_HCI_ERR_PIN_OR_KEY_MISSING           0x06
 #define BT_HCI_ERR_MEM_CAPACITY_EXCEEDED        0x07
+#define BT_HCI_ERR_CONN_TIMEOUT                 0x08
+#define BT_HCI_ERR_CONN_LIMIT_EXCEEDED          0x09
+#define BT_HCI_ERR_SYNC_CONN_LIMIT_EXCEEDED     0x0a
+#define BT_HCI_ERR_CONN_ALREADY_EXISTS          0x0b
 #define BT_HCI_ERR_CMD_DISALLOWED               0x0c
 #define BT_HCI_ERR_INSUFFICIENT_RESOURCES       0x0d
+#define BT_HCI_ERR_INSUFFICIENT_SECURITY        0x0e
+#define BT_HCI_ERR_BD_ADDR_UNACCEPTABLE         0x0f
+#define BT_HCI_ERR_CONN_ACCEPT_TIMEOUT          0x10
 #define BT_HCI_ERR_UNSUPP_FEATURE_PARAM_VAL     0x11
 #define BT_HCI_ERR_INVALID_PARAM                0x12
 #define BT_HCI_ERR_REMOTE_USER_TERM_CONN        0x13
+#define BT_HCI_ERR_REMOTE_LOW_RESOURCES         0x14
+#define BT_HCI_ERR_REMOTE_POWER_OFF             0x15
+#define BT_HCI_ERR_LOCALHOST_TERM_CONN          0x16
 #define BT_HCI_ERR_PAIRING_NOT_ALLOWED          0x18
 #define BT_HCI_ERR_UNSUPP_REMOTE_FEATURE        0x1a
 #define BT_HCI_ERR_INVALID_LL_PARAM             0x1e
 #define BT_HCI_ERR_UNSPECIFIED                  0x1f
+#define BT_HCI_ERR_UNSUPP_LL_PARAM_VAL          0x20
+#define BT_HCI_ERR_LL_RESP_TIMEOUT              0x22
+#define BT_HCI_ERR_LL_PROC_COLLISION            0x23
+#define BT_HCI_ERR_INSTANT_PASSED               0x28
 #define BT_HCI_ERR_PAIRING_NOT_SUPPORTED        0x29
+#define BT_HCI_ERR_DIFF_TRANS_COLLISION         0x2a
 #define BT_HCI_ERR_UNACCEPT_CONN_PARAM          0x3b
 #define BT_HCI_ERR_ADV_TIMEOUT                  0x3c
+#define BT_HCI_ERR_TERM_DUE_TO_MIC_FAIL         0x3d
+#define BT_HCI_ERR_CONN_FAIL_TO_ESTAB           0x3e
 
 /* EIR/AD data type definitions */
 #define BT_DATA_FLAGS                   0x01 /* AD flags */
@@ -125,6 +157,11 @@ static inline bool bt_addr_le_is_identity(const bt_addr_le_t *addr)
 #define BT_DATA_SOLICIT32               0x1f /* Solicit UUIDs, 32-bit */
 #define BT_DATA_SVC_DATA32              0x20 /* Service data, 32-bit UUID */
 #define BT_DATA_SVC_DATA128             0x21 /* Service data, 128-bit UUID */
+#define BT_DATA_URI                     0x24 /* URI */
+#define BT_DATA_MESH_PROV               0x29 /* Mesh Provisioning PDU */
+#define BT_DATA_MESH_MESSAGE            0x2a /* Mesh Networking PDU */
+#define BT_DATA_MESH_BEACON             0x2b /* Mesh Beacon */
+
 #define BT_DATA_MANUFACTURER_DATA       0xff /* Manufacturer Specific Data */
 
 #define BT_LE_AD_LIMITED                0x01 /* Limited Discoverable */
@@ -212,6 +249,8 @@ struct bt_hci_cmd_hdr {
 						BT_LE_FEAT_BIT_PHY_2M)
 #define BT_FEAT_LE_PHY_CODED(feat)              BT_LE_FEAT_TEST(feat, \
 						BT_LE_FEAT_BIT_PHY_CODED)
+#define BT_FEAT_LE_PRIVACY(feat)                BT_LE_FEAT_TEST(feat, \
+						BT_LE_FEAT_BIT_PRIVACY)
 
 /* LE States */
 #define BT_LE_STATES_SLAVE_CONN_ADV(states)     (states & 0x0000004000000000)
@@ -499,6 +538,20 @@ struct bt_hci_write_local_name {
 #define BT_BREDR_SCAN_INQUIRY                   0x01
 #define BT_BREDR_SCAN_PAGE                      0x02
 
+#define BT_TX_POWER_LEVEL_CURRENT               0x00
+#define BT_TX_POWER_LEVEL_MAX                   0x01
+#define BT_HCI_OP_READ_TX_POWER_LEVEL           BT_OP(BT_OGF_BASEBAND, 0x002d)
+struct bt_hci_cp_read_tx_power_level {
+	u16_t handle;
+	u8_t  type;
+} __packed;
+
+struct bt_hci_rp_read_tx_power_level {
+	u8_t  status;
+	u16_t handle;
+	s8_t  tx_power_level;
+} __packed;
+
 #define BT_HCI_CTL_TO_HOST_FLOW_DISABLE         0x00
 #define BT_HCI_CTL_TO_HOST_FLOW_ENABLE          0x01
 #define BT_HCI_OP_SET_CTL_TO_HOST_FLOW          BT_OP(BT_OGF_BASEBAND, 0x0031)
@@ -549,6 +602,28 @@ struct bt_hci_cp_write_le_host_supp {
 #define BT_HCI_OP_WRITE_SC_HOST_SUPP            BT_OP(BT_OGF_BASEBAND, 0x007a)
 struct bt_hci_cp_write_sc_host_supp {
 	u8_t  sc_support;
+} __packed;
+
+#define BT_HCI_OP_READ_AUTH_PAYLOAD_TIMEOUT     BT_OP(BT_OGF_BASEBAND, 0x007b)
+struct bt_hci_cp_read_auth_payload_timeout {
+	u16_t handle;
+} __packed;
+
+struct bt_hci_rp_read_auth_payload_timeout {
+	u8_t  status;
+	u16_t handle;
+	u16_t auth_payload_timeout;
+} __packed;
+
+#define BT_HCI_OP_WRITE_AUTH_PAYLOAD_TIMEOUT    BT_OP(BT_OGF_BASEBAND, 0x007c)
+struct bt_hci_cp_write_auth_payload_timeout {
+	u16_t handle;
+	u16_t auth_payload_timeout;
+} __packed;
+
+struct bt_hci_rp_write_auth_payload_timeout {
+	u8_t  status;
+	u16_t handle;
 } __packed;
 
 /* HCI version from Assigned Numbers */
@@ -609,6 +684,16 @@ struct bt_hci_rp_read_buffer_size {
 struct bt_hci_rp_read_bd_addr {
 	u8_t      status;
 	bt_addr_t bdaddr;
+} __packed;
+
+#define BT_HCI_OP_READ_RSSI                     BT_OP(BT_OGF_STATUS, 0x0005)
+struct bt_hci_cp_read_rssi {
+	u16_t handle;
+} __packed;
+struct bt_hci_rp_read_rssi {
+	u8_t  status;
+	u16_t handle;
+	s8_t  rssi;
 } __packed;
 
 #define BT_HCI_OP_READ_ENCRYPTION_KEY_SIZE      BT_OP(BT_OGF_STATUS, 0x0008)
@@ -773,7 +858,7 @@ struct bt_hci_cp_le_set_host_chan_classif {
 struct bt_hci_cp_le_read_chan_map {
 	u16_t handle;
 } __packed;
-struct bt_hci_rp_le_read_ch_map {
+struct bt_hci_rp_le_read_chan_map {
 	u8_t  status;
 	u16_t handle;
 	u8_t  ch_map[5];
@@ -1328,7 +1413,7 @@ struct bt_hci_evt_remote_version_info {
 	u16_t handle;
 	u8_t  version;
 	u16_t manufacturer;
-	u8_t  subversion;
+	u16_t subversion;
 } __packed;
 
 #define BT_HCI_EVT_CMD_COMPLETE                 0x0e
@@ -1387,6 +1472,15 @@ struct bt_hci_evt_link_key_notify {
 	bt_addr_t bdaddr;
 	u8_t      link_key[16];
 	u8_t      key_type;
+} __packed;
+
+/* Overflow link types */
+#define BT_OVERFLOW_LINK_SYNCH                  0x00
+#define BT_OVERFLOW_LINK_ACL                    0x01
+
+#define BT_HCI_EVT_DATA_BUF_OVERFLOW            0x1a
+struct bt_hci_evt_data_buf_overflow {
+	u8_t      link_type;
 } __packed;
 
 #define BT_HCI_EVT_INQUIRY_RESULT_WITH_RSSI     0x22
@@ -1582,8 +1676,8 @@ struct bt_hci_evt_le_enh_conn_complete {
 #define BT_HCI_EVT_LE_DIRECT_ADV_REPORT         0x0b
 struct bt_hci_evt_le_direct_adv_info {
 	u8_t         evt_type;
-	bt_addr_le_t dir_addr;
 	bt_addr_le_t addr;
+	bt_addr_le_t dir_addr;
 	s8_t         rssi;
 } __packed;
 struct bt_hci_evt_le_direct_adv_report {
@@ -1750,8 +1844,67 @@ struct bt_hci_evt_le_chan_sel_algo {
 #define BT_EVT_MASK_LE_SCAN_REQ_RECEIVED         BT_EVT_BIT(18)
 #define BT_EVT_MASK_LE_CHAN_SEL_ALGO             BT_EVT_BIT(19)
 
+/** Allocate a HCI command buffer.
+  *
+  * This function allocates a new buffer for a HCI command. It is given
+  * the OpCode (encoded e.g. using the BT_OP macro) and the total length
+  * of the parameters. Upon successful return the buffer is ready to have
+  * the parameters encoded into it.
+  *
+  * @param opcode     Command OpCode.
+  * @param param_len  Length of command parameters.
+  *
+  * @return Newly allocated buffer.
+  */
+struct net_buf *bt_hci_cmd_create(u16_t opcode, u8_t param_len);
+
+/** Send a HCI command asynchronously.
+  *
+  * This function is used for sending a HCI command asynchronously. It can
+  * either be called for a buffer created using bt_hci_cmd_create(), or
+  * if the command has no parameters a NULL can be passed instead. The
+  * sending of the command will happen asynchronously, i.e. upon successful
+  * return from this function the caller only knows that it was queued
+  * successfully.
+  *
+  * If synchronous behavior, and retrieval of the Command Complete parameters
+  * is desired, the bt_hci_cmd_send_sync() API should be used instead.
+  *
+  * @param opcode Command OpCode.
+  * @param buf    Command buffer or NULL (if no parameters).
+  *
+  * @return 0 on success or negative error value on failure.
+  */
+int bt_hci_cmd_send(u16_t opcode, struct net_buf *buf);
+
+/** Send a HCI command synchronously.
+  *
+  * This function is used for sending a HCI command synchronously. It can
+  * either be called for a buffer created using bt_hci_cmd_create(), or
+  * if the command has no parameters a NULL can be passed instead.
+  *
+  * The function will block until a Command Status or a Command Complete
+  * event is returned. If either of these have a non-zero status the function
+  * will return a negative error code and the response reference will not
+  * be set. If the command completed successfully and a non-NULL rsp parameter
+  * was given, this parameter will be set to point to a buffer containing
+  * the response parameters.
+  *
+  * @param opcode Command OpCode.
+  * @param buf    Command buffer or NULL (if no parameters).
+  * @param rsp    Place to store a reference to the command response. May
+  *               be NULL if the caller is not interested in the response
+  *               parameters. If non-NULL is passed the caller is responsible
+  *               for calling net_buf_unref() on the buffer when done parsing
+  *               it.
+  *
+  * @return 0 on success or negative error value on failure.
+  */
+int bt_hci_cmd_send_sync(u16_t opcode, struct net_buf *buf,
+			 struct net_buf **rsp);
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __BT_HCI_H */
+#endif /* ZEPHYR_INCLUDE_BLUETOOTH_HCI_H_ */

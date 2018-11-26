@@ -16,6 +16,10 @@
 #include "clk.h"
 #include "soc.h"
 
+#include <logging/log.h>
+LOG_MODULE_REGISTER(i2c_qmsi);
+#include "i2c-priv.h"
+
 /* Convenient macros to get the controller instance and the driver data. */
 #define GET_CONTROLLER_INSTANCE(dev) \
 	(((const struct i2c_qmsi_config_info *) \
@@ -25,7 +29,7 @@
 
 struct i2c_qmsi_config_info {
 	qm_i2c_t instance; /* Controller instance. */
-	union dev_config default_cfg;
+	u32_t bitrate;
 	clk_periph_t clock_gate;
 };
 
@@ -113,7 +117,7 @@ static struct i2c_qmsi_driver_data driver_data_0;
 
 static const struct i2c_qmsi_config_info config_info_0 = {
 	.instance = QM_I2C_0,
-	.default_cfg.raw = CONFIG_I2C_0_DEFAULT_CFG,
+	.bitrate = DT_I2C_0_BITRATE,
 	.clock_gate = CLK_PERIPH_I2C_M0_REGISTER | CLK_PERIPH_CLK,
 };
 
@@ -129,7 +133,7 @@ static struct i2c_qmsi_driver_data driver_data_1;
 
 static const struct i2c_qmsi_config_info config_info_1 = {
 	.instance = QM_I2C_1,
-	.default_cfg.raw = CONFIG_I2C_1_DEFAULT_CFG,
+	.bitrate = DT_I2C_1_BITRATE,
 	.clock_gate = CLK_PERIPH_I2C_M1_REGISTER | CLK_PERIPH_CLK,
 };
 
@@ -144,21 +148,21 @@ static int i2c_qmsi_configure(struct device *dev, u32_t config)
 	qm_i2c_t instance = GET_CONTROLLER_INSTANCE(dev);
 	struct i2c_qmsi_driver_data *driver_data = GET_DRIVER_DATA(dev);
 	qm_i2c_reg_t *const controller = QM_I2C[instance];
-	union dev_config cfg;
 	int rc;
 	qm_i2c_config_t qm_cfg;
 
-	cfg.raw = config;
-
 	/* This driver only supports master mode. */
-	if (!cfg.bits.is_master_device)
+	if (!(I2C_MODE_MASTER & config))
 		return -EINVAL;
 
 	qm_cfg.mode = QM_I2C_MASTER;
-	qm_cfg.address_mode = (cfg.bits.use_10_bit_addr) ? QM_I2C_10_BIT :
-							   QM_I2C_7_BIT;
+	if (I2C_ADDR_10_BITS & config) {
+		qm_cfg.address_mode = QM_I2C_10_BIT;
+	} else {
+		qm_cfg.address_mode = QM_I2C_7_BIT;
+	}
 
-	switch (cfg.bits.speed) {
+	switch (I2C_SPEED_GET(config)) {
 	case I2C_SPEED_STANDARD:
 		qm_cfg.speed = QM_I2C_SPEED_STD;
 		break;
@@ -253,36 +257,46 @@ static const struct i2c_driver_api api = {
 	.transfer = i2c_qmsi_transfer,
 };
 
+/* Some SoCs have interrupt controllers w/o priority, in that case set
+ * it to 0 */
+#ifndef DT_I2C_0_IRQ_PRI
+#define DT_I2C_0_IRQ_PRI 0
+#endif
+
+#ifndef DT_I2C_1_IRQ_PRI
+#define DT_I2C_1_IRQ_PRI 0
+#endif
+
 static int i2c_qmsi_init(struct device *dev)
 {
 	struct i2c_qmsi_driver_data *driver_data = GET_DRIVER_DATA(dev);
 	const struct i2c_qmsi_config_info *config = dev->config->config_info;
 	qm_i2c_t instance = GET_CONTROLLER_INSTANCE(dev);
+	u32_t bitrate_cfg;
 	int err;
 
 	k_sem_init(&driver_data->device_sync_sem, 0, UINT_MAX);
-	k_sem_init(&driver_data->sem, 0, UINT_MAX);
-	k_sem_give(&driver_data->sem);
+	k_sem_init(&driver_data->sem, 1, UINT_MAX);
 
 	switch (instance) {
 	case QM_I2C_0:
 		/* Register interrupt handler, unmask IRQ and route it
 		 * to Lakemont core.
 		 */
-		IRQ_CONNECT(IRQ_GET_NUMBER(QM_IRQ_I2C_0_INT),
-			    CONFIG_I2C_0_IRQ_PRI, qm_i2c_0_irq_isr, NULL,
-			    (IOAPIC_LEVEL | IOAPIC_HIGH));
-		irq_enable(IRQ_GET_NUMBER(QM_IRQ_I2C_0_INT));
+		IRQ_CONNECT(DT_I2C_0_IRQ,
+			    DT_I2C_0_IRQ_PRI, qm_i2c_0_irq_isr, NULL,
+			    DT_I2C_0_IRQ_FLAGS);
+		irq_enable(DT_I2C_0_IRQ);
 		QM_IR_UNMASK_INTERRUPTS(
 				QM_INTERRUPT_ROUTER->i2c_master_0_int_mask);
 		break;
 
 #ifdef CONFIG_I2C_1
 	case QM_I2C_1:
-		IRQ_CONNECT(IRQ_GET_NUMBER(QM_IRQ_I2C_1_INT),
-			    CONFIG_I2C_1_IRQ_PRI, qm_i2c_1_irq_isr, NULL,
-			    (IOAPIC_LEVEL | IOAPIC_HIGH));
-		irq_enable(IRQ_GET_NUMBER(QM_IRQ_I2C_1_INT));
+		IRQ_CONNECT(DT_I2C_1_IRQ,
+			    DT_I2C_1_IRQ_PRI, qm_i2c_1_irq_isr, NULL,
+			    DT_I2C_1_IRQ_FLAGS);
+		irq_enable(DT_I2C_1_IRQ);
 		QM_IR_UNMASK_INTERRUPTS(
 				QM_INTERRUPT_ROUTER->i2c_master_1_int_mask);
 		break;
@@ -294,7 +308,9 @@ static int i2c_qmsi_init(struct device *dev)
 
 	clk_periph_enable(config->clock_gate);
 
-	err = i2c_qmsi_configure(dev, config->default_cfg.raw);
+	bitrate_cfg = _i2c_map_dt_bitrate(config->bitrate);
+
+	err = i2c_qmsi_configure(dev, I2C_MODE_MASTER | bitrate_cfg);
 	if (err < 0) {
 		return err;
 	}

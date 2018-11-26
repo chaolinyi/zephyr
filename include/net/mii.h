@@ -8,8 +8,13 @@
  * @brief Definitions for IEEE 802.3, Section 2 MII compatible PHY transceivers
  */
 
-#ifndef _MII_H_
-#define _MII_H_
+#ifndef ZEPHYR_INCLUDE_NET_MII_H_
+#define ZEPHYR_INCLUDE_NET_MII_H_
+
+/**
+ * @addtogroup ethernet
+ * @{
+ */
 
 /* MII management registers */
 #define MII_BMCR       0x0  /** Basic Mode Control Register */
@@ -76,4 +81,8 @@
 			   MII_ADVERTISE_100_HALF | MII_ADVERTISE_100_FULL |\
 			   MII_ADVERTISE_SEL_IEEE_802_3)
 
-#endif /* _MII_H_ */
+/**
+ * @}
+ */
+
+#endif /* ZEPHYR_INCLUDE_NET_MII_H_ */

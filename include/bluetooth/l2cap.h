@@ -7,8 +7,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef __BT_L2CAP_H
-#define __BT_L2CAP_H
+#ifndef ZEPHYR_INCLUDE_BLUETOOTH_L2CAP_H_
+#define ZEPHYR_INCLUDE_BLUETOOTH_L2CAP_H_
 
 /**
  * @brief L2CAP
@@ -38,7 +38,7 @@ extern "C" {
  *
  *   @return Needed buffer size to match the requested L2CAP MTU.
  */
-#define BT_L2CAP_BUF_SIZE(mtu) (CONFIG_BLUETOOTH_HCI_RESERVE + \
+#define BT_L2CAP_BUF_SIZE(mtu) (CONFIG_BT_HCI_RESERVE + \
 				BT_HCI_ACL_HDR_SIZE + BT_L2CAP_HDR_SIZE + \
 				(mtu))
 
@@ -78,26 +78,26 @@ struct bt_l2cap_chan {
 	bt_l2cap_chan_destroy_t		destroy;
 	/* Response Timeout eXpired (RTX) timer */
 	struct k_delayed_work		rtx_work;
-#if defined(CONFIG_BLUETOOTH_L2CAP_DYNAMIC_CHANNEL)
+#if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
 	bt_l2cap_chan_state_t		state;
 	/** Remote PSM to be connected */
-	u16_t			psm;
+	u16_t				psm;
 	/** Helps match request context during CoC */
 	u8_t				ident;
 	bt_security_t			required_sec_level;
-#endif /* CONFIG_BLUETOOTH_L2CAP_DYNAMIC_CHANNEL */
+#endif /* CONFIG_BT_L2CAP_DYNAMIC_CHANNEL */
 };
 
 /** @brief LE L2CAP Endpoint structure. */
 struct bt_l2cap_le_endpoint {
 	/** Endpoint CID */
-	u16_t			cid;
+	u16_t				cid;
 	/** Endpoint Maximum Transmission Unit */
-	u16_t			mtu;
+	u16_t				mtu;
 	/** Endpoint Maximum PDU payload Size */
-	u16_t			mps;
+	u16_t				mps;
 	/** Endpoint initial credits */
-	u16_t			init_credits;
+	u16_t				init_credits;
 	/** Endpoint credits */
 	struct k_sem			credits;
 };
@@ -133,9 +133,9 @@ struct bt_l2cap_le_chan {
 /** @brief BREDR L2CAP Endpoint structure. */
 struct bt_l2cap_br_endpoint {
 	/** Endpoint CID */
-	u16_t			cid;
+	u16_t				cid;
 	/** Endpoint Maximum Transmission Unit */
-	u16_t			mtu;
+	u16_t				mtu;
 };
 
 /** @brief BREDR L2CAP Channel structure. */
@@ -203,18 +203,35 @@ struct bt_l2cap_chan_ops {
 	 *
 	 *  @param chan The channel receiving data.
 	 *  @param buf Buffer containing incoming data.
+	 *
+	 *  @return 0 in case of success or negative value in case of error.
+	 *  If -EINPROGRESS is returned user has to confirm once the data has
+	 *  been processed by calling bt_l2cap_chan_recv_complete passing back
+	 *  the buffer received with its original user_data which contains the
+	 *  number of segments/credits used by the packet.
 	 */
-	void (*recv)(struct bt_l2cap_chan *chan, struct net_buf *buf);
+	int (*recv)(struct bt_l2cap_chan *chan, struct net_buf *buf);
 };
 
 /** @def BT_L2CAP_CHAN_SEND_RESERVE
  *  @brief Headroom needed for outgoing buffers
  */
-#define BT_L2CAP_CHAN_SEND_RESERVE (CONFIG_BLUETOOTH_HCI_RESERVE + 4 + 4)
+#define BT_L2CAP_CHAN_SEND_RESERVE (CONFIG_BT_HCI_RESERVE + 4 + 4)
 
 /** @brief L2CAP Server structure. */
 struct bt_l2cap_server {
-	/** Server PSM */
+	/** Server PSM. Possible values:
+	 *
+	 *  0               A dynamic value will be auto-allocated when
+	 *                  bt_l2cap_server_register() is called.
+	 *
+	 *  0x0001-0x007f   Standard, Bluetooth SIG-assigned fixed values.
+	 *
+	 *  0x0080-0x00ff   Dynamically allocated. May be pre-set by the
+	 *                  application before server registration (not
+	 *                  recommended however), or auto-allocated by the
+	 *                  stack if the app gave 0 as the value.
+	 */
 	u16_t			psm;
 
 	/** Required minimim security level */
@@ -229,6 +246,10 @@ struct bt_l2cap_server {
 	 *  @param chan Pointer to received the allocated channel
 	 *
 	 *  @return 0 in case of success or negative value in case of error.
+	 *  Possible return values:
+	 *  -ENOMEM if no available space for new channel.
+	 *  -EACCES if application did not authorize the connection.
+	 *  -EPERM if encryption key size is too short.
 	 */
 	int (*accept)(struct bt_conn *conn, struct bt_l2cap_chan **chan);
 
@@ -240,6 +261,15 @@ struct bt_l2cap_server {
  *  Register L2CAP server for a PSM, each new connection is authorized using
  *  the accept() callback which in case of success shall allocate the channel
  *  structure to be used by the new connection.
+ *
+ *  For fixed, SIG-assigned PSMs (in the range 0x0001-0x007f) the PSM should
+ *  be assigned to server->psm before calling this API. For dynamic PSMs
+ *  (in the range 0x0080-0x00ff) server->psm may be pre-set to a given value
+ *  (this is however not recommended) or be left as 0, in which case upon
+ *  return a newly allocated value will have been assigned to it. For
+ *  dynamically allocated values the expectation is that it's exposed through
+ *  a GATT service, and that's how L2CAP clients discover how to connect to
+ *  the server.
  *
  *  @param server Server structure.
  *
@@ -296,13 +326,28 @@ int bt_l2cap_chan_disconnect(struct bt_l2cap_chan *chan);
 /** @brief Send data to L2CAP channel
  *
  *  Send data from buffer to the channel. If credits are not available, buf will
- *  be queued and sent as and when credits are recieved from peer.
+ *  be queued and sent as and when credits are received from peer.
  *  Regarding to first input parameter, to get details see reference description
  *  to bt_l2cap_chan_connect() API above.
  *
  *  @return Bytes sent in case of success or negative value in case of error.
  */
 int bt_l2cap_chan_send(struct bt_l2cap_chan *chan, struct net_buf *buf);
+
+/** @brief Complete receiving L2CAP channel data
+ *
+ * Complete the reception of incoming data. This shall only be called if the
+ * channel recv callback has returned -EINPROGRESS to process some incoming
+ * data. The buffer shall contain the original user_data as that is used for
+ * storing the credits/segments used by the packet.
+ *
+ * @param chan Channel object.
+ * @param buf Buffer containing the data.
+ *
+ *  @return 0 in case of success or negative value in case of error.
+ */
+int bt_l2cap_chan_recv_complete(struct bt_l2cap_chan *chan,
+				struct net_buf *buf);
 
 #ifdef __cplusplus
 }
@@ -312,4 +357,4 @@ int bt_l2cap_chan_send(struct bt_l2cap_chan *chan, struct net_buf *buf);
  * @}
  */
 
-#endif /* __BT_L2CAP_H */
+#endif /* ZEPHYR_INCLUDE_BLUETOOTH_L2CAP_H_ */

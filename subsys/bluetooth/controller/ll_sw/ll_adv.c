@@ -28,7 +28,7 @@ struct ll_adv_set *ll_adv_set_get(void)
 	return &ll_adv;
 }
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT)
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
 u32_t ll_adv_params_set(u8_t handle, u16_t evt_prop, u32_t interval,
 			u8_t adv_type, u8_t own_addr_type,
 			u8_t direct_addr_type, u8_t const *const direct_addr,
@@ -41,7 +41,7 @@ u32_t ll_adv_params_set(u8_t handle, u16_t evt_prop, u32_t interval,
 				     PDU_ADV_TYPE_NONCONN_IND,
 				     PDU_ADV_TYPE_DIRECT_IND,
 				     PDU_ADV_TYPE_EXT_IND};
-#else /* !CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT */
+#else /* !CONFIG_BT_CTLR_ADV_EXT */
 u32_t ll_adv_params_set(u16_t interval, u8_t adv_type,
 			u8_t own_addr_type, u8_t direct_addr_type,
 			u8_t const *const direct_addr, u8_t chan_map,
@@ -52,16 +52,16 @@ u32_t ll_adv_params_set(u16_t interval, u8_t adv_type,
 				     PDU_ADV_TYPE_SCAN_IND,
 				     PDU_ADV_TYPE_NONCONN_IND,
 				     PDU_ADV_TYPE_DIRECT_IND};
-#endif /* !CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT */
+#endif /* !CONFIG_BT_CTLR_ADV_EXT */
 
 	struct radio_adv_data *radio_adv_data;
 	struct pdu_adv *pdu;
 
-	if (radio_adv_is_enabled()) {
+	if (ll_adv_is_enabled()) {
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT)
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
 	/* TODO: check and fail (0x12, invalid HCI cmd param) if invalid
 	 * evt_prop bits.
 	 */
@@ -94,7 +94,7 @@ u32_t ll_adv_params_set(u16_t interval, u8_t adv_type,
 			ll_adv.phy_p = phy_p;
 		}
 	}
-#endif /* CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT */
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
 
 	/* remember params so that set adv/scan data and adv enable
 	 * interface can correctly update adv/scan data in the
@@ -115,7 +115,7 @@ u32_t ll_adv_params_set(u16_t interval, u8_t adv_type,
 	pdu->type = pdu_adv_type[adv_type];
 	pdu->rfu = 0;
 
-	if (IS_ENABLED(CONFIG_BLUETOOTH_CONTROLLER_CHAN_SEL_2) &&
+	if (IS_ENABLED(CONFIG_BT_CTLR_CHAN_SEL_2) &&
 	    ((pdu->type == PDU_ADV_TYPE_ADV_IND) ||
 	     (pdu->type == PDU_ADV_TYPE_DIRECT_IND))) {
 		pdu->chan_sel = 1;
@@ -123,30 +123,29 @@ u32_t ll_adv_params_set(u16_t interval, u8_t adv_type,
 		pdu->chan_sel = 0;
 	}
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER_PRIVACY)
+#if defined(CONFIG_BT_CTLR_PRIVACY)
 	ll_adv.own_addr_type = own_addr_type;
 	if (ll_adv.own_addr_type == BT_ADDR_LE_PUBLIC_ID ||
 	    ll_adv.own_addr_type == BT_ADDR_LE_RANDOM_ID) {
 		ll_adv.id_addr_type = direct_addr_type;
 		memcpy(&ll_adv.id_addr, direct_addr, BDADDR_SIZE);
 	}
-#endif /* CONFIG_BLUETOOTH_CONTROLLER_PRIVACY */
+#endif /* CONFIG_BT_CTLR_PRIVACY */
 	pdu->tx_addr = own_addr_type & 0x1;
 	pdu->rx_addr = 0;
 	if (pdu->type == PDU_ADV_TYPE_DIRECT_IND) {
 		pdu->rx_addr = direct_addr_type;
-		memcpy(&pdu->payload.direct_ind.tgt_addr[0], direct_addr,
-		       BDADDR_SIZE);
-		pdu->len = sizeof(struct pdu_adv_payload_direct_ind);
+		memcpy(&pdu->direct_ind.tgt_addr[0], direct_addr, BDADDR_SIZE);
+		pdu->len = sizeof(struct pdu_adv_direct_ind);
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT)
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
 	} else if (pdu->type == PDU_ADV_TYPE_EXT_IND) {
-		struct pdu_adv_payload_com_ext_adv *p;
+		struct pdu_adv_com_ext_adv *p;
 		struct ext_adv_hdr *h;
 		u8_t *ptr;
 		u8_t len;
 
-		p = (void *)&pdu->payload.adv_ext_ind;
+		p = (void *)&pdu->adv_ext_ind;
 		h = (void *)p->ext_hdr_adi_adv_data;
 		ptr = (u8_t *)h + sizeof(*h);
 
@@ -182,14 +181,14 @@ u32_t ll_adv_params_set(u16_t interval, u8_t adv_type,
 
 		/* Calc primary PDU len */
 		len = ptr - (u8_t *)p;
-		if (len > (offsetof(struct pdu_adv_payload_com_ext_adv,
+		if (len > (offsetof(struct pdu_adv_com_ext_adv,
 				    ext_hdr_adi_adv_data) + sizeof(*h))) {
 			p->ext_hdr_len = len -
-				offsetof(struct pdu_adv_payload_com_ext_adv,
+				offsetof(struct pdu_adv_com_ext_adv,
 					 ext_hdr_adi_adv_data);
 			pdu->len = len;
 		} else {
-			pdu->len = offsetof(struct pdu_adv_payload_com_ext_adv,
+			pdu->len = offsetof(struct pdu_adv_com_ext_adv,
 					    ext_hdr_adi_adv_data);
 		}
 
@@ -225,7 +224,7 @@ u32_t ll_adv_params_set(u16_t interval, u8_t adv_type,
 		/* NOTE: TargetA, filled at enable and RPA timeout */
 
 		/* NOTE: AdvA, filled at enable and RPA timeout */
-#endif /* CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT */
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
 
 	} else if (pdu->len == 0) {
 		pdu->len = BDADDR_SIZE;
@@ -257,7 +256,7 @@ void ll_adv_data_set(u8_t len, u8_t const *const data)
 	radio_adv_data = radio_adv_data_get();
 	prev = (struct pdu_adv *)&radio_adv_data->data[radio_adv_data->last][0];
 	if ((prev->type == PDU_ADV_TYPE_DIRECT_IND) ||
-	    (IS_ENABLED(CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT) &&
+	    (IS_ENABLED(CONFIG_BT_CTLR_ADV_EXT) &&
 	     (prev->type == PDU_ADV_TYPE_EXT_IND))) {
 		/* TODO: remember data, to be used if type is changed using
 		 * parameter set function ll_adv_params_set afterwards.
@@ -280,7 +279,7 @@ void ll_adv_data_set(u8_t len, u8_t const *const data)
 	pdu->type = prev->type;
 	pdu->rfu = 0;
 
-	if (IS_ENABLED(CONFIG_BLUETOOTH_CONTROLLER_CHAN_SEL_2)) {
+	if (IS_ENABLED(CONFIG_BT_CTLR_CHAN_SEL_2)) {
 		pdu->chan_sel = prev->chan_sel;
 	} else {
 		pdu->chan_sel = 0;
@@ -288,9 +287,8 @@ void ll_adv_data_set(u8_t len, u8_t const *const data)
 
 	pdu->tx_addr = prev->tx_addr;
 	pdu->rx_addr = prev->rx_addr;
-	memcpy(&pdu->payload.adv_ind.addr[0],
-	       &prev->payload.adv_ind.addr[0], BDADDR_SIZE);
-	memcpy(&pdu->payload.adv_ind.data[0], data, len);
+	memcpy(&pdu->adv_ind.addr[0], &prev->adv_ind.addr[0], BDADDR_SIZE);
+	memcpy(&pdu->adv_ind.data[0], data, len);
 	pdu->len = BDADDR_SIZE + len;
 
 	/* commit the update so controller picks it. */
@@ -325,9 +323,8 @@ void ll_scan_data_set(u8_t len, u8_t const *const data)
 	pdu->tx_addr = prev->tx_addr;
 	pdu->rx_addr = 0;
 	pdu->len = BDADDR_SIZE + len;
-	memcpy(&pdu->payload.scan_rsp.addr[0],
-	       &prev->payload.scan_rsp.addr[0], BDADDR_SIZE);
-	memcpy(&pdu->payload.scan_rsp.data[0], data, len);
+	memcpy(&pdu->scan_rsp.addr[0], &prev->scan_rsp.addr[0], BDADDR_SIZE);
+	memcpy(&pdu->scan_rsp.data[0], data, len);
 
 	/* commit the update so controller picks it. */
 	radio_scan_data->last = last;
@@ -337,14 +334,14 @@ u32_t ll_adv_enable(u8_t enable)
 {
 	struct radio_adv_data *radio_scan_data;
 	struct radio_adv_data *radio_adv_data;
-	int rl_idx = RL_IDX_NONE;
+	u8_t   rl_idx = FILTER_IDX_NONE;
 	struct pdu_adv *pdu_scan;
 	struct pdu_adv *pdu_adv;
 	u32_t status;
 
 	if (!enable) {
 		return radio_adv_disable();
-	} else if (radio_adv_is_enabled()) {
+	} else if (ll_adv_is_enabled()) {
 		return 0;
 	}
 
@@ -365,13 +362,13 @@ u32_t ll_adv_enable(u8_t enable)
 
 	if (0) {
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT)
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
 	} else if (pdu_adv->type == PDU_ADV_TYPE_EXT_IND) {
-		struct pdu_adv_payload_com_ext_adv *p;
+		struct pdu_adv_com_ext_adv *p;
 		struct ext_adv_hdr *h;
 		u8_t *ptr;
 
-		p = (void *)&pdu_adv->payload.adv_ext_ind;
+		p = (void *)&pdu_adv->adv_ext_ind;
 		h = (void *)p->ext_hdr_adi_adv_data;
 		ptr = (u8_t *)h + sizeof(*h);
 
@@ -382,10 +379,10 @@ u32_t ll_adv_enable(u8_t enable)
 		}
 
 		/* TODO: TargetA, fill here at enable */
-#endif /* CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT */
+#endif /* CONFIG_BT_CTLR_ADV_EXT */
 	} else {
 		bool priv = false;
-#if defined(CONFIG_BLUETOOTH_CONTROLLER_PRIVACY)
+#if defined(CONFIG_BT_CTLR_PRIVACY)
 		/* Prepare whitelist and optionally resolving list */
 		ll_filters_adv_update(ll_adv.filter_policy);
 
@@ -393,9 +390,9 @@ u32_t ll_adv_enable(u8_t enable)
 		    ll_adv.own_addr_type == BT_ADDR_LE_RANDOM_ID) {
 			/* Look up the resolving list */
 			rl_idx = ll_rl_find(ll_adv.id_addr_type,
-					    ll_adv.id_addr);
+					    ll_adv.id_addr, NULL);
 
-			if (rl_idx >= 0) {
+			if (rl_idx != FILTER_IDX_NONE) {
 				/* Generate RPAs if required */
 				ll_rl_rpa_update(false);
 			}
@@ -403,24 +400,25 @@ u32_t ll_adv_enable(u8_t enable)
 			ll_rl_pdu_adv_update(rl_idx, pdu_adv);
 			ll_rl_pdu_adv_update(rl_idx, pdu_scan);
 			priv = true;
-			rl_idx = rl_idx >= 0 ? rl_idx : RL_IDX_NONE;
 		}
-#endif /* !CONFIG_BLUETOOTH_CONTROLLER_PRIVACY */
+#endif /* !CONFIG_BT_CTLR_PRIVACY */
 		if (!priv) {
-			memcpy(&pdu_adv->payload.adv_ind.addr[0],
-			       ll_addr_get(pdu_adv->tx_addr, NULL), BDADDR_SIZE);
-			memcpy(&pdu_scan->payload.scan_rsp.addr[0],
-			       ll_addr_get(pdu_adv->tx_addr, NULL), BDADDR_SIZE);
+			memcpy(&pdu_adv->adv_ind.addr[0],
+			       ll_addr_get(pdu_adv->tx_addr, NULL),
+			       BDADDR_SIZE);
+			memcpy(&pdu_scan->scan_rsp.addr[0],
+			       ll_addr_get(pdu_adv->tx_addr, NULL),
+			       BDADDR_SIZE);
 		}
 	}
-#if defined(CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT)
+#if defined(CONFIG_BT_CTLR_ADV_EXT)
 	status = radio_adv_enable(ll_adv.phy_p, ll_adv.interval,
 				  ll_adv.chan_map, ll_adv.filter_policy,
 				  rl_idx);
-#else /* !CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT */
+#else /* !CONFIG_BT_CTLR_ADV_EXT */
 	status = radio_adv_enable(ll_adv.interval, ll_adv.chan_map,
 				  ll_adv.filter_policy, rl_idx);
-#endif /* !CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT */
+#endif /* !CONFIG_BT_CTLR_ADV_EXT */
 
 	return status;
 }

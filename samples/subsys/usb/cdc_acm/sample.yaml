@@ -1,8 +1,11 @@
 sample:
-    description: TBD
-    name: TBD
+  name: CDC ACM USB
 tests:
--   test_x86:
-        build_only: true
-        platform_whitelist: quark_se_c1000_devboard
-        tags: usb
+  usb.cdc-acm:
+    depends_on: usb_device
+    tags: usb
+    harness: console
+    harness_config:
+      type: one_line
+      regex:
+        - "Wait for DTR"

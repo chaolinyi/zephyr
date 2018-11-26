@@ -7,8 +7,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef __BT_HCI_DRIVER_H
-#define __BT_HCI_DRIVER_H
+#ifndef ZEPHYR_INCLUDE_DRIVERS_BLUETOOTH_HCI_DRIVER_H_
+#define ZEPHYR_INCLUDE_DRIVERS_BLUETOOTH_HCI_DRIVER_H_
 
 /**
  * @brief HCI drivers
@@ -24,6 +24,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+enum {
+	/* The host should never send HCI_Reset */
+	BT_QUIRK_NO_RESET = BIT(0),
+};
 
 /**
  * @brief Check if an HCI event is high priority or not.
@@ -44,7 +49,7 @@ static inline bool bt_hci_evt_is_prio(u8_t evt)
 	switch (evt) {
 	case BT_HCI_EVT_CMD_COMPLETE:
 	case BT_HCI_EVT_CMD_STATUS:
-#if defined(CONFIG_BLUETOOTH_CONN)
+#if defined(CONFIG_BT_CONN)
 	case BT_HCI_EVT_NUM_COMPLETED_PACKETS:
 #endif
 		return true;
@@ -113,6 +118,13 @@ struct bt_hci_driver {
 	/** Bus of the transport (BT_HCI_DRIVER_BUS_*) */
 	enum bt_hci_driver_bus bus;
 
+	/** Specific controller quirks. These are set by the HCI driver
+	 *  and acted upon by the host. They can either be statically
+	 *  set at buildtime, or set at runtime before the HCI driver's
+	 *  open() callback returns.
+	 */
+	u32_t quirks;
+
 	/**
 	 * @brief Open the HCI transport.
 	 *
@@ -121,7 +133,7 @@ struct bt_hci_driver {
 	 * is safe to start calling the send() handler.
 	 *
 	 * If the driver uses its own RX thread, i.e.
-	 * CONFIG_BLUETOOTH_RECV_IS_RX_THREAD is set, then this
+	 * CONFIG_BT_RECV_IS_RX_THREAD is set, then this
 	 * function is expected to start that thread.
 	 *
 	 * @return 0 on success or negative error number on failure.
@@ -163,4 +175,4 @@ int bt_hci_driver_register(const struct bt_hci_driver *drv);
  * @}
  */
 
-#endif /* __BT_HCI_DRIVER_H */
+#endif /* ZEPHYR_INCLUDE_DRIVERS_BLUETOOTH_HCI_DRIVER_H_ */

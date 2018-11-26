@@ -12,6 +12,9 @@
  * with popular Contiki-based native border routers.
  */
 
+#define LOG_MODULE_NAME net_wpan_serial
+#define NET_LOG_LEVEL LOG_LEVEL_DBG
+
 #include <string.h>
 #include <device.h>
 #include <uart.h>
@@ -21,9 +24,6 @@
 #include <misc/printk.h>
 
 #include <net/buf.h>
-
-#define SYS_LOG_DOMAIN "wpan_serial"
-#include <logging/sys_log.h>
 
 #include <net_private.h>
 
@@ -108,14 +108,14 @@ static int slip_process_byte(unsigned char c)
 {
 	struct net_buf *buf;
 #ifdef VERBOSE_DEBUG
-	SYS_LOG_DBG("recv: state %u byte %x", slip_state, c);
+	NET_DBG("recv: state %u byte %x", slip_state, c);
 #endif
 	switch (slip_state) {
 	case STATE_GARBAGE:
 		if (c == SLIP_END) {
 			slip_state = STATE_OK;
 		}
-		SYS_LOG_DBG("garbage: discard byte %x", c);
+		NET_DBG("garbage: discard byte %x", c);
 		return 0;
 
 	case STATE_ESC:
@@ -141,18 +141,18 @@ static int slip_process_byte(unsigned char c)
 	}
 
 #ifdef VERBOSE_DEBUG
-	SYS_LOG_DBG("processed: state %u byte %x", slip_state, c);
+	NET_DBG("processed: state %u byte %x", slip_state, c);
 #endif
 
 	if (!pkt_curr) {
 		pkt_curr = net_pkt_get_reserve_rx(0, K_NO_WAIT);
 		if (!pkt_curr) {
-			SYS_LOG_ERR("No more buffers");
+			NET_ERR("No more buffers");
 			return 0;
 		}
 		buf = net_pkt_get_frag(pkt_curr, K_NO_WAIT);
 		if (!buf) {
-			SYS_LOG_ERR("No more buffers");
+			NET_ERR("No more buffers");
 			net_pkt_unref(pkt_curr);
 			return 0;
 		}
@@ -162,7 +162,7 @@ static int slip_process_byte(unsigned char c)
 	}
 
 	if (!net_buf_tailroom(buf)) {
-		SYS_LOG_ERR("No more buf space: buf %p len %u", buf, buf->len);
+		NET_ERR("No more buf space: buf %p len %u", buf, buf->len);
 
 		net_pkt_unref(pkt_curr);
 		pkt_curr = NULL;
@@ -178,11 +178,11 @@ static void interrupt_handler(struct device *dev)
 {
 	while (uart_irq_update(dev) && uart_irq_is_pending(dev)) {
 #ifdef VERBOSE_DEBUG
-		SYS_LOG_DBG("");
+		NET_DBG("");
 #endif
 		if (uart_irq_tx_ready(dev)) {
 #ifdef VERBOSE_DEBUG
-			SYS_LOG_DBG("TX ready interrupt");
+			NET_DBG("TX ready interrupt");
 #endif
 
 			k_sem_give(&tx_sem);
@@ -192,7 +192,7 @@ static void interrupt_handler(struct device *dev)
 			unsigned char byte;
 
 #ifdef VERBOSE_DEBUG
-			SYS_LOG_DBG("RX ready interrupt");
+			NET_DBG("RX ready interrupt");
 #endif
 
 			while (uart_fifo_read(dev, &byte, sizeof(byte))) {
@@ -203,11 +203,11 @@ static void interrupt_handler(struct device *dev)
 					 * packet
 					 */
 					if (!pkt_curr) {
-						SYS_LOG_DBG("Skip SLIP_END");
+						NET_DBG("Skip SLIP_END");
 						continue;
 					}
 
-					SYS_LOG_DBG("Full packet %p", pkt_curr);
+					NET_DBG("Full packet %p", pkt_curr);
 
 					k_fifo_put(&rx_queue, pkt_curr);
 					pkt_curr = NULL;
@@ -225,20 +225,20 @@ static void send_data(u8_t *cfg, u8_t *data, size_t len)
 
 	pkt = net_pkt_get_reserve_rx(0, K_NO_WAIT);
 	if (!pkt) {
-		SYS_LOG_DBG("No pkt available");
+		NET_DBG("No pkt available");
 		return;
 	}
 
 	buf = net_pkt_get_frag(pkt, K_NO_WAIT);
 	if (!buf) {
-		SYS_LOG_DBG("No fragment available");
+		NET_DBG("No fragment available");
 		net_pkt_unref(pkt);
 		return;
 	}
 
 	net_pkt_frag_insert(pkt, buf);
 
-	SYS_LOG_DBG("queue pkt %p buf %p len %u", pkt, buf, len);
+	NET_DBG("queue pkt %p buf %p len %u", pkt, buf, len);
 
 	/* Add configuration id */
 	memcpy(net_buf_add(buf, 2), cfg, 2);
@@ -258,7 +258,7 @@ static void get_ieee_addr(void)
 	u8_t cfg[2] = { '!', 'M' };
 	u8_t mac[8];
 
-	SYS_LOG_DBG("");
+	NET_DBG("");
 
 	/* Send in BE */
 	sys_memcpy_swap(mac, mac_addr, sizeof(mac));
@@ -276,7 +276,7 @@ static void process_request(struct net_buf *buf)
 		get_ieee_addr();
 		break;
 	default:
-		SYS_LOG_ERR("Not handled request %c", cmd);
+		NET_ERR("Not handled request %c", cmd);
 		break;
 	}
 }
@@ -302,7 +302,7 @@ static void process_data(struct net_pkt *pkt)
 	seq = net_buf_pull_u8(buf);
 	num_attr = net_buf_pull_u8(buf);
 
-	SYS_LOG_DBG("seq %u num_attr %u", seq, num_attr);
+	NET_DBG("seq %u num_attr %u", seq, num_attr);
 
 	/**
 	 * There are some attributes sent over this protocol
@@ -319,7 +319,7 @@ static void process_data(struct net_pkt *pkt)
 	/* Transmit data through radio */
 	ret = radio_api->tx(ieee802154_dev, pkt, buf);
 	if (ret) {
-		SYS_LOG_ERR("Error transmit data");
+		NET_ERR("Error transmit data");
 	}
 
 	/* TODO: Return correct status codes */
@@ -331,7 +331,7 @@ static void process_data(struct net_pkt *pkt)
 
 static void set_channel(u8_t chan)
 {
-	SYS_LOG_DBG("Set channel %c", chan);
+	NET_DBG("Set channel %c", chan);
 
 	radio_api->set_channel(ieee802154_dev, chan);
 }
@@ -341,7 +341,7 @@ static void process_config(struct net_pkt *pkt)
 	struct net_buf *buf = net_buf_frag_last(pkt->frags);
 	u8_t cmd = net_buf_pull_u8(buf);
 
-	SYS_LOG_DBG("Process config %c", cmd);
+	NET_DBG("Process config %c", cmd);
 
 	switch (cmd) {
 	case 'S':
@@ -351,13 +351,13 @@ static void process_config(struct net_pkt *pkt)
 		set_channel(net_buf_pull_u8(buf));
 		break;
 	default:
-		SYS_LOG_ERR("Unhandled cmd %u", cmd);
+		NET_ERR("Unhandled cmd %u", cmd);
 	}
 }
 
 static void rx_thread(void)
 {
-	SYS_LOG_INF("RX thread started");
+	NET_INFO("RX thread started");
 
 	while (1) {
 		struct net_pkt *pkt;
@@ -367,7 +367,7 @@ static void rx_thread(void)
 		pkt = k_fifo_get(&rx_queue, K_FOREVER);
 		buf = net_buf_frag_last(pkt->frags);
 
-		SYS_LOG_DBG("Got pkt %p buf %p", pkt, buf);
+		NET_DBG("Got pkt %p buf %p", pkt, buf);
 
 		hexdump("SLIP >", buf->data, buf->len);
 
@@ -381,7 +381,7 @@ static void rx_thread(void)
 			process_config(pkt);
 			break;
 		default:
-			SYS_LOG_ERR("Unknown message specifier %c", specifier);
+			NET_ERR("Unknown message specifier %c", specifier);
 			break;
 		}
 
@@ -429,7 +429,7 @@ static size_t slip_buffer(u8_t *sbuf, struct net_buf *buf)
  */
 static void tx_thread(void)
 {
-	SYS_LOG_DBG("TX thread started");
+	NET_DBG("TX thread started");
 
 	/* Allow to send one TX */
 	k_sem_give(&tx_sem);
@@ -445,13 +445,9 @@ static void tx_thread(void)
 		buf = net_buf_frag_last(pkt->frags);
 		len = net_pkt_get_len(pkt);
 
-		SYS_LOG_DBG("Send pkt %p buf %p len %d", pkt, buf, len);
+		NET_DBG("Send pkt %p buf %p len %d", pkt, buf, len);
 
 		hexdump("SLIP <", buf->data, buf->len);
-
-		/* Remove LQI */
-		/* TODO: Reuse get_lqi() */
-		buf->len -= 1;
 
 		/* remove FCS 2 bytes */
 		buf->len -= 2;
@@ -510,13 +506,11 @@ static u8_t *get_mac(struct device *dev)
 
 static bool init_ieee802154(void)
 {
-	u16_t short_addr;
-
-	SYS_LOG_INF("Initialize ieee802.15.4");
+	NET_INFO("Initialize ieee802.15.4");
 
 	ieee802154_dev = device_get_binding(CONFIG_IEEE802154_CC2520_DRV_NAME);
 	if (!ieee802154_dev) {
-		SYS_LOG_ERR("Cannot get CC250 device");
+		NET_ERR("Cannot get CC250 device");
 		return false;
 	}
 
@@ -527,28 +521,56 @@ static bool init_ieee802154(void)
 	 */
 	get_mac(ieee802154_dev);
 
-#ifdef CONFIG_NET_SAMPLES_SETTINGS
-	SYS_LOG_INF("Set panid %x channel %d",
-		    CONFIG_NET_SAMPLES_IEEE802154_PAN_ID,
-		    CONFIG_NET_SAMPLES_IEEE802154_CHANNEL);
+	if (IEEE802154_HW_FILTER &
+	    radio_api->get_capabilities(ieee802154_dev)) {
+		struct ieee802154_filter filter;
+		u16_t short_addr;
 
-	radio_api->set_pan_id(ieee802154_dev,
-			      CONFIG_NET_SAMPLES_IEEE802154_PAN_ID);
+		/* Set short address */
+		short_addr = (mac_addr[0] << 8) + mac_addr[1];
+		filter.short_addr = short_addr;
+
+		radio_api->filter(ieee802154_dev, true,
+				  IEEE802154_FILTER_TYPE_SHORT_ADDR,
+				  &filter);
+
+		/* Set ieee address */
+		filter.ieee_addr = mac_addr;
+		radio_api->filter(ieee802154_dev, true,
+				  IEEE802154_FILTER_TYPE_IEEE_ADDR,
+				  &filter);
+
+#ifdef CONFIG_NET_CONFIG_SETTINGS
+		NET_INFO("Set panid %x", CONFIG_NET_CONFIG_IEEE802154_PAN_ID);
+
+		filter.pan_id = CONFIG_NET_CONFIG_IEEE802154_PAN_ID;
+
+		radio_api->filter(ieee802154_dev, true,
+				  IEEE802154_FILTER_TYPE_PAN_ID,
+				  &filter);
+#endif /* CONFIG_NET_CONFIG_SETTINGS */
+	}
+
+#ifdef CONFIG_NET_CONFIG_SETTINGS
+	NET_INFO("Set channel %x", CONFIG_NET_CONFIG_IEEE802154_CHANNEL);
 	radio_api->set_channel(ieee802154_dev,
-			       CONFIG_NET_SAMPLES_IEEE802154_CHANNEL);
-#endif /* CONFIG_NET_SAMPLES_SETTINGS */
-
-	/* Set short address */
-	short_addr = (mac_addr[0] << 8) + mac_addr[1];
-	radio_api->set_short_addr(ieee802154_dev, short_addr);
-
-	/* Set ieee address */
-	radio_api->set_ieee_addr(ieee802154_dev, mac_addr);
+			       CONFIG_NET_CONFIG_IEEE802154_CHANNEL);
+#endif /* CONFIG_NET_CONFIG_SETTINGS */
 
 	/* Start ieee802154 */
 	radio_api->start(ieee802154_dev);
 
 	return true;
+}
+
+int net_recv_data(struct net_if *iface, struct net_pkt *pkt)
+{
+	NET_DBG("Got data, pkt %p, frags->len %d",
+		    pkt, net_pkt_get_len(pkt));
+
+	k_fifo_put(&tx_queue, pkt);
+
+	return 0;
 }
 
 void main(void)
@@ -559,11 +581,11 @@ void main(void)
 
 	dev = device_get_binding(CONFIG_CDC_ACM_PORT_NAME);
 	if (!dev) {
-		SYS_LOG_ERR("CDC ACM device not found");
+		NET_ERR("CDC ACM device not found");
 		return;
 	}
 
-	SYS_LOG_DBG("Wait for DTR");
+	NET_DBG("Wait for DTR");
 
 	while (1) {
 		uart_line_ctrl_get(dev, LINE_CTRL_DTR, &dtr);
@@ -573,7 +595,7 @@ void main(void)
 
 	uart_dev = dev;
 
-	SYS_LOG_DBG("DTR set, continue");
+	NET_DBG("DTR set, continue");
 
 #if CONFIG_DCD_DSR
 	/* They are optional, we use them to test the interrupt endpoint */
@@ -594,7 +616,7 @@ void main(void)
 	else
 		printk("Baudrate detected: %d\n", baudrate);
 
-	SYS_LOG_INF("USB serial initialized");
+	NET_INFO("USB serial initialized");
 
 	/* Initialize net_pkt */
 	net_pkt_init();
@@ -607,7 +629,7 @@ void main(void)
 
 	/* Initialize ieee802154 device */
 	if (!init_ieee802154()) {
-		SYS_LOG_ERR("Unable to initialize ieee802154");
+		NET_ERR("Unable to initialize ieee802154");
 		return;
 	};
 
@@ -618,35 +640,4 @@ void main(void)
 
 	/* Enable tx interrupts */
 	uart_irq_tx_enable(dev);
-}
-
-void ieee802154_init(struct net_if *iface)
-{
-	SYS_LOG_DBG("");
-}
-
-int net_recv_data(struct net_if *iface, struct net_pkt *pkt)
-{
-	SYS_LOG_DBG("Got data, pkt %p, frags->len %d",
-		    pkt, net_pkt_get_len(pkt));
-
-	k_fifo_put(&tx_queue, pkt);
-
-	return 0;
-}
-
-extern enum net_verdict ieee802154_radio_handle_ack(struct net_if *iface,
-						    struct net_pkt *pkt)
-{
-	SYS_LOG_DBG("");
-
-	/* parse on higher layer */
-	return NET_CONTINUE;
-}
-
-int ieee802154_radio_send(struct net_if *iface, struct net_pkt *pkt)
-{
-	SYS_LOG_DBG("");
-
-	return -ENOTSUP;
 }

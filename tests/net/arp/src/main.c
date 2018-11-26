@@ -6,6 +6,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define LOG_MODULE_NAME net_test
+#define NET_LOG_LEVEL CONFIG_NET_ARP_LOG_LEVEL
+
 #include <zephyr.h>
 #include <linker/sections.h>
 
@@ -20,7 +23,9 @@
 #include <net/net_core.h>
 #include <net/net_pkt.h>
 #include <net/net_ip.h>
-#include <net/arp.h>
+#include <ztest.h>
+
+#include "arp.h"
 
 #define NET_LOG_ENABLED 1
 #include "net_private.h"
@@ -28,6 +33,15 @@
 static bool req_test;
 
 static char *app_data = "0123456789";
+
+static bool entry_found;
+static struct net_eth_addr *expected_hwaddr;
+
+static struct net_pkt *pending_pkt;
+
+static struct net_eth_addr hwaddr = { { 0x42, 0x11, 0x69, 0xde, 0xfa, 0xec } };
+
+static int send_status = -EINVAL;
 
 struct net_arp_context {
 	u8_t mac_addr[sizeof(struct net_eth_addr)];
@@ -67,12 +81,6 @@ static void net_arp_iface_init(struct net_if *iface)
 	net_if_set_link_addr(iface, mac, 6, NET_LINK_ETHERNET);
 }
 
-static struct net_pkt *pending_pkt;
-
-static struct net_eth_addr hwaddr = { { 0x42, 0x11, 0x69, 0xde, 0xfa, 0xec } };
-
-static int send_status = -EINVAL;
-
 static int tester_send(struct net_if *iface, struct net_pkt *pkt)
 {
 	struct net_eth_hdr *hdr;
@@ -105,6 +113,7 @@ static int tester_send(struct net_if *iface, struct net_pkt *pkt)
 			if (!req_test && memcmp(&hdr->dst, &hwaddr,
 						sizeof(struct net_eth_addr))) {
 				char out[sizeof("xx:xx:xx:xx:xx:xx")];
+
 				snprintk(out, sizeof(out), "%s",
 					 net_sprint_ll_addr(
 						 (u8_t *)&hdr->dst,
@@ -122,6 +131,7 @@ static int tester_send(struct net_if *iface, struct net_pkt *pkt)
 			if (memcmp(&hdr->src, &hwaddr,
 				   sizeof(struct net_eth_addr))) {
 				char out[sizeof("xx:xx:xx:xx:xx:xx")];
+
 				snprintk(out, sizeof(out), "%s",
 					 net_sprint_ll_addr(
 						 (u8_t *)&hdr->src,
@@ -136,9 +146,6 @@ static int tester_send(struct net_if *iface, struct net_pkt *pkt)
 			}
 		}
 	}
-
-	printk("Data was sent successfully\n");
-
 	net_pkt_unref(pkt);
 
 	send_status = 0;
@@ -151,10 +158,13 @@ static inline struct in_addr *if_get_addr(struct net_if *iface)
 	int i;
 
 	for (i = 0; i < NET_IF_MAX_IPV4_ADDR; i++) {
-		if (iface->ipv4.unicast[i].is_used &&
-		    iface->ipv4.unicast[i].address.family == AF_INET &&
-		    iface->ipv4.unicast[i].addr_state == NET_ADDR_PREFERRED) {
-			return &iface->ipv4.unicast[i].address.in_addr;
+		if (iface->config.ip.ipv4->unicast[i].is_used &&
+		    iface->config.ip.ipv4->unicast[i].address.family ==
+								AF_INET &&
+		    iface->config.ip.ipv4->unicast[i].addr_state ==
+							NET_ADDR_PREFERRED) {
+			return
+			    &iface->config.ip.ipv4->unicast[i].address.in_addr;
 		}
 	}
 
@@ -188,7 +198,7 @@ static inline struct net_pkt *prepare_arp_reply(struct net_if *iface,
 
 	eth->type = htons(NET_ETH_PTYPE_ARP);
 
-	memset(&eth->dst.addr, 0xff, sizeof(struct net_eth_addr));
+	(void)memset(&eth->dst.addr, 0xff, sizeof(struct net_eth_addr));
 	memcpy(&eth->src.addr, net_if_get_link_addr(iface)->addr,
 	       sizeof(struct net_eth_addr));
 
@@ -245,7 +255,7 @@ static inline struct net_pkt *prepare_arp_request(struct net_if *iface,
 
 	eth->type = htons(NET_ETH_PTYPE_ARP);
 
-	memset(&eth->dst.addr, 0xff, sizeof(struct net_eth_addr));
+	(void)memset(&eth->dst.addr, 0xff, sizeof(struct net_eth_addr));
 	memcpy(&eth->src.addr, addr, sizeof(struct net_eth_addr));
 
 	hdr->hwtype = htons(NET_ARP_HTYPE_ETH);
@@ -254,7 +264,7 @@ static inline struct net_pkt *prepare_arp_request(struct net_if *iface,
 	hdr->protolen = sizeof(struct in_addr);
 	hdr->opcode = htons(NET_ARP_REQUEST);
 
-	memset(&hdr->dst_hwaddr.addr, 0x00, sizeof(struct net_eth_addr));
+	(void)memset(&hdr->dst_hwaddr.addr, 0x00, sizeof(struct net_eth_addr));
 	memcpy(&hdr->src_hwaddr.addr, addr, sizeof(struct net_eth_addr));
 
 	net_ipaddr_copy(&hdr->src_ipaddr, &req_hdr->src_ipaddr);
@@ -270,7 +280,7 @@ fail:
 }
 
 static void setup_eth_header(struct net_if *iface, struct net_pkt *pkt,
-			     struct net_eth_addr *hwaddr, u16_t type)
+			     const struct net_eth_addr *hwaddr, u16_t type)
 {
 	struct net_eth_hdr *hdr = (struct net_eth_hdr *)net_pkt_ll(pkt);
 
@@ -283,15 +293,20 @@ static void setup_eth_header(struct net_if *iface, struct net_pkt *pkt,
 
 struct net_arp_context net_arp_context_data;
 
-static struct net_if_api net_arp_if_api = {
+#if defined(CONFIG_NET_ARP) && defined(CONFIG_NET_L2_ETHERNET)
+static const struct ethernet_api net_arp_if_api = {
+	.iface_api.init = net_arp_iface_init,
+	.iface_api.send = tester_send,
+};
+
+#define _ETH_L2_LAYER ETHERNET_L2
+#define _ETH_L2_CTX_TYPE NET_L2_GET_CTX_TYPE(ETHERNET_L2)
+#else
+static const struct net_if_api net_arp_if_api = {
 	.init = net_arp_iface_init,
 	.send = tester_send,
 };
 
-#if defined(CONFIG_NET_ARP) && defined(CONFIG_NET_L2_ETHERNET)
-#define _ETH_L2_LAYER ETHERNET_L2
-#define _ETH_L2_CTX_TYPE NET_L2_GET_CTX_TYPE(ETHERNET_L2)
-#else
 #define _ETH_L2_LAYER DUMMY_L2
 #define _ETH_L2_CTX_TYPE NET_L2_GET_CTX_TYPE(DUMMY_L2)
 #endif
@@ -301,8 +316,21 @@ NET_DEVICE_INIT(net_arp_test, "net_arp_test",
 		CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
 		&net_arp_if_api, _ETH_L2_LAYER, _ETH_L2_CTX_TYPE, 127);
 
-static bool run_tests(void)
+static void arp_cb(struct arp_entry *entry, void *user_data)
 {
+	struct in_addr *addr = user_data;
+
+	if (memcmp(&entry->ip, addr, sizeof(struct in_addr)) == 0 &&
+	    memcmp(&entry->eth, expected_hwaddr,
+		   sizeof(struct net_eth_addr)) == 0) {
+		entry_found = true;
+	}
+}
+
+void test_arp(void)
+{
+	k_thread_priority_set(k_current_get(), K_PRIO_COOP(7));
+
 	struct net_pkt *pkt, *pkt2;
 	struct net_buf *frag;
 	struct net_if *iface;
@@ -331,20 +359,18 @@ static bool run_tests(void)
 				      &src,
 				      NET_ADDR_MANUAL,
 				      0);
+	zassert_not_null(ifaddr, "Cannot add address");
 	ifaddr->addr_state = NET_ADDR_PREFERRED;
 
 	/* Application data for testing */
 	pkt = net_pkt_get_reserve_tx(sizeof(struct net_eth_hdr), K_FOREVER);
-	if (!pkt) {
-		printk("Out of mem TX\n");
-		return false;
-	}
+
+	/**TESTPOINTS: Check if out of memory*/
+	zassert_not_null(pkt, "Out of mem TX");
 
 	frag = net_pkt_get_frag(pkt, K_FOREVER);
-	if (!frag) {
-		printk("Out of mem DATA\n");
-		return false;
-	}
+
+	zassert_not_null(frag, "Out of mem DATA");
 
 	net_pkt_frag_add(pkt, frag);
 
@@ -358,7 +384,7 @@ static bool run_tests(void)
 		printk("LL reserve invalid, should be %zd was %d\n",
 		       sizeof(struct net_eth_hdr),
 		       net_pkt_ll_reserve(pkt));
-		return false;
+		zassert_true(0, "exiting");
 	}
 
 	ipv4 = (struct net_ipv4_hdr *)net_buf_add(frag,
@@ -368,31 +394,27 @@ static bool run_tests(void)
 
 	memcpy(net_buf_add(frag, len), app_data, len);
 
-	pkt2 = net_arp_prepare(pkt);
+	pkt2 = net_arp_prepare(pkt, &NET_IPV4_HDR(pkt)->dst, NULL);
 
 	/* pkt2 is the ARP packet and pkt is the IPv4 packet and it was
 	 * stored in ARP table.
 	 */
-	if (pkt2 == pkt) {
+
+	/**TESTPOINTS: Check packets*/
+	zassert_not_equal((void *)(pkt2), (void *)(pkt),
 		/* The packets cannot be the same as the ARP cache has
 		 * still room for the pkt.
 		 */
-		printk("ARP cache should still have free space\n");
-		return false;
-	}
+		"ARP cache should still have free space");
 
-	if (!pkt2) {
-		printk("ARP pkt is empty\n");
-		return false;
-	}
+	zassert_not_null(pkt2, "ARP pkt is empty");
 
 	/* The ARP cache should now have a link to pending net_pkt
 	 * that is to be sent after we have got an ARP reply.
 	 */
-	if (!pkt->frags) {
-		printk("Pending pkt fragment is NULL\n");
-		return false;
-	}
+	zassert_not_null(pkt->frags,
+		"Pending pkt fragment is NULL");
+
 	pending_pkt = pkt;
 
 	/* pkt2 should contain the arp header, verify it */
@@ -404,20 +426,20 @@ static bool run_tests(void)
 		net_hexdump("ETH dest correct",
 			    (u8_t *)net_eth_broadcast_addr(),
 			    sizeof(struct net_eth_addr));
-		return false;
+		zassert_true(0, "exiting");
 	}
 
 	if (memcmp(net_pkt_ll(pkt2) + sizeof(struct net_eth_addr),
-		   iface->link_addr.addr,
+		   net_if_get_link_addr(iface)->addr,
 		   sizeof(struct net_eth_addr))) {
 		printk("ARP ETH source address invalid\n");
 		net_hexdump("ETH src correct",
-			    iface->link_addr.addr,
+			    net_if_get_link_addr(iface)->addr,
 			    sizeof(struct net_eth_addr));
 		net_hexdump("ETH src wrong  ",
 			    net_pkt_ll(pkt2) +	sizeof(struct net_eth_addr),
 			    sizeof(struct net_eth_addr));
-		return false;
+		zassert_true(0, "exiting");
 	}
 
 	arp_hdr = NET_ARP_HDR(pkt2);
@@ -426,57 +448,53 @@ static bool run_tests(void)
 	if (eth_hdr->type != htons(NET_ETH_PTYPE_ARP)) {
 		printk("ETH type 0x%x, should be 0x%x\n",
 		       eth_hdr->type, htons(NET_ETH_PTYPE_ARP));
-		return false;
+		zassert_true(0, "exiting");
 	}
 
 	if (arp_hdr->hwtype != htons(NET_ARP_HTYPE_ETH)) {
 		printk("ARP hwtype 0x%x, should be 0x%x\n",
 		       arp_hdr->hwtype, htons(NET_ARP_HTYPE_ETH));
-		return false;
+		zassert_true(0, "exiting");
 	}
 
 	if (arp_hdr->protocol != htons(NET_ETH_PTYPE_IP)) {
 		printk("ARP protocol 0x%x, should be 0x%x\n",
 		       arp_hdr->protocol, htons(NET_ETH_PTYPE_IP));
-		return false;
+		zassert_true(0, "exiting");
 	}
 
 	if (arp_hdr->hwlen != sizeof(struct net_eth_addr)) {
 		printk("ARP hwlen 0x%x, should be 0x%zx\n",
 		       arp_hdr->hwlen, sizeof(struct net_eth_addr));
-		return false;
+		zassert_true(0, "exiting");
 	}
 
 	if (arp_hdr->protolen != sizeof(struct in_addr)) {
 		printk("ARP IP addr len 0x%x, should be 0x%zx\n",
 		       arp_hdr->protolen, sizeof(struct in_addr));
-		return false;
+		zassert_true(0, "exiting");
 	}
 
 	if (arp_hdr->opcode != htons(NET_ARP_REQUEST)) {
 		printk("ARP opcode 0x%x, should be 0x%x\n",
 		       arp_hdr->opcode, htons(NET_ARP_REQUEST));
-		return false;
+		zassert_true(0, "exiting");
 	}
 
 	if (!net_ipv4_addr_cmp(&arp_hdr->dst_ipaddr,
 			       &NET_IPV4_HDR(pkt)->dst)) {
-		char out[sizeof("xxx.xxx.xxx.xxx")];
-		snprintk(out, sizeof(out), "%s",
-			 net_sprint_ipv4_addr(&arp_hdr->dst_ipaddr));
-		printk("ARP IP dest invalid %s, should be %s", out,
-		       net_sprint_ipv4_addr(&NET_IPV4_HDR(pkt)->dst));
-		return false;
+		printk("ARP IP dest invalid %s, should be %s",
+			net_sprint_ipv4_addr(&arp_hdr->dst_ipaddr),
+			net_sprint_ipv4_addr(&NET_IPV4_HDR(pkt)->dst));
+		zassert_true(0, "exiting");
 	}
 
 	if (!net_ipv4_addr_cmp(&arp_hdr->src_ipaddr,
 			       &NET_IPV4_HDR(pkt)->src)) {
-		char out[sizeof("xxx.xxx.xxx.xxx")];
-		snprintk(out, sizeof(out), "%s",
-			 net_sprint_ipv4_addr(&arp_hdr->src_ipaddr));
-		printk("ARP IP src invalid %s, should be %s", out,
-		       net_sprint_ipv4_addr(&NET_IPV4_HDR(pkt)->src));
-		return false;
+		printk("ARP IP src invalid %s, should be %s",
+			net_sprint_ipv4_addr(&arp_hdr->src_ipaddr),
+			net_sprint_ipv4_addr(&NET_IPV4_HDR(pkt)->src));
+		zassert_true(0, "exiting");
 	}
 
 	/* We could have send the new ARP request but for this test we
@@ -484,35 +502,29 @@ static bool run_tests(void)
 	 */
 	net_pkt_unref(pkt2);
 
-	if (pkt->ref != 2) {
-		printk("ARP cache should own the original packet\n");
-		return false;
-	}
+	zassert_equal(pkt->ref, 2,
+		"ARP cache should own the original packet");
 
 	/* Then a case where target is not in the same subnet */
 	net_ipaddr_copy(&ipv4->dst, &dst_far);
 
-	pkt2 = net_arp_prepare(pkt);
+	pkt2 = net_arp_prepare(pkt, &NET_IPV4_HDR(pkt)->dst, NULL);
 
-	if (pkt2 == pkt) {
-		printk("ARP cache should not find anything\n");
-		return false;
-	}
+	zassert_not_equal((void *)(pkt2), (void *)(pkt),
+		"ARP cache should not find anything");
 
-	if (!pkt2) {
-		printk("ARP pkt2 is empty\n");
-		return false;
-	}
+	/**TESTPOINTS: Check if packets not empty*/
+	zassert_not_null(pkt2,
+		"ARP pkt2 is empty");
 
 	arp_hdr = NET_ARP_HDR(pkt2);
 
-	if (!net_ipv4_addr_cmp(&arp_hdr->dst_ipaddr, &iface->ipv4.gw)) {
-		char out[sizeof("xxx.xxx.xxx.xxx")];
-		snprintk(out, sizeof(out), "%s",
-			 net_sprint_ipv4_addr(&arp_hdr->dst_ipaddr));
-		printk("ARP IP dst invalid %s, should be %s\n", out,
-			 net_sprint_ipv4_addr(&iface->ipv4.gw));
-		return false;
+	if (!net_ipv4_addr_cmp(&arp_hdr->dst_ipaddr,
+			       &iface->config.ip.ipv4->gw)) {
+		printk("ARP IP dst invalid %s, should be %s\n",
+			net_sprint_ipv4_addr(&arp_hdr->dst_ipaddr),
+			net_sprint_ipv4_addr(&iface->config.ip.ipv4->gw));
+		zassert_true(0, "exiting");
 	}
 
 	net_pkt_unref(pkt2);
@@ -527,11 +539,10 @@ static bool run_tests(void)
 	 */
 	net_pkt_ref(pkt);
 
-	pkt2 = net_arp_prepare(pkt);
-	if (!pkt2) {
-		printk("ARP cache is not sending the request again\n");
-		return false;
-	}
+	pkt2 = net_arp_prepare(pkt, &NET_IPV4_HDR(pkt)->dst, NULL);
+
+	zassert_not_null(pkt2,
+		"ARP cache is not sending the request again");
 
 	net_pkt_unref(pkt2);
 
@@ -545,11 +556,10 @@ static bool run_tests(void)
 	 */
 	net_pkt_ref(pkt);
 
-	pkt2 = net_arp_prepare(pkt);
-	if (!pkt2) {
-		printk("ARP cache did not send a req\n");
-		return false;
-	}
+	pkt2 = net_arp_prepare(pkt, &NET_IPV4_HDR(pkt)->dst, NULL);
+
+	zassert_not_null(pkt2,
+		"ARP cache did not send a req");
 
 	/* Restore the original address so that following test case can
 	 * work properly.
@@ -559,19 +569,13 @@ static bool run_tests(void)
 	/* The arp request packet is now verified, create an arp reply.
 	 * The previous value of pkt is stored in arp table and is not lost.
 	 */
-	pkt = net_pkt_get_reserve_rx(sizeof(struct net_eth_hdr), K_FOREVER);
-	if (!pkt) {
-		printk("Out of mem RX reply\n");
-		return false;
-	}
-	printk("%d pkt %p\n", __LINE__, pkt);
+	pkt = net_pkt_get_reserve_rx(sizeof(struct net_eth_hdr), K_SECONDS(1));
 
-	frag = net_pkt_get_frag(pkt, K_FOREVER);
-	if (!frag) {
-		printk("Out of mem DATA reply\n");
-		return false;
-	}
-	printk("%d frag %p\n", __LINE__, frag);
+	zassert_not_null(pkt, "Out of mem RX reply");
+
+	frag = net_pkt_get_frag(pkt, K_SECONDS(1));
+
+	zassert_not_null(frag, "Out of mem DATA reply");
 
 	net_pkt_frag_add(pkt, frag);
 
@@ -584,10 +588,9 @@ static bool run_tests(void)
 	net_ipaddr_copy(&arp_hdr->src_ipaddr, &src);
 
 	pkt2 = prepare_arp_reply(iface, pkt, &hwaddr);
-	if (!pkt2) {
-		printk("ARP reply generation failed.");
-		return false;
-	}
+
+	zassert_not_null(pkt2,
+		"ARP reply generation failed.");
 
 	/* The pending packet should now be sent */
 	switch (net_arp_input(pkt2)) {
@@ -601,30 +604,26 @@ static bool run_tests(void)
 	/* Yielding so that network interface TX thread can proceed. */
 	k_yield();
 
-	if (send_status < 0) {
-		printk("ARP reply was not sent\n");
-		return false;
-	}
+	/**TESTPOINTS: Check ARP reply*/
+	zassert_false(send_status < 0,
+		"ARP reply was not sent");
 
-	if (pkt->ref != 1) {
-		printk("ARP cache should no longer own the original packet\n");
-		return false;
-	}
+	zassert_equal(pkt->ref, 1,
+		"ARP cache should no longer own the original packet");
 
 	net_pkt_unref(pkt);
 
 	/* Then feed in ARP request */
 	pkt = net_pkt_get_reserve_rx(sizeof(struct net_eth_hdr), K_FOREVER);
-	if (!pkt) {
-		printk("Out of mem RX request\n");
-		return false;
-	}
+
+	/**TESTPOINTS: Check if out of memory*/
+	zassert_not_null(pkt,
+		"Out of mem RX request");
 
 	frag = net_pkt_get_frag(pkt, K_FOREVER);
-	if (!frag) {
-		printk("Out of mem DATA request\n");
-		return false;
-	}
+
+	zassert_not_null(frag,
+		"Out of mem DATA request");
 
 	net_pkt_frag_add(pkt, frag);
 
@@ -639,10 +638,10 @@ static bool run_tests(void)
 	setup_eth_header(iface, pkt, &hwaddr, NET_ETH_PTYPE_ARP);
 
 	pkt2 = prepare_arp_request(iface, pkt, &hwaddr);
-	if (!pkt2) {
-		printk("ARP request generation failed.");
-		return false;
-	}
+
+	/**TESTPOINT: Check if ARP request generation failed*/
+	zassert_not_null(pkt2,
+		"ARP request generation failed.");
 
 	req_test = true;
 
@@ -657,25 +656,73 @@ static bool run_tests(void)
 	/* Yielding so that network interface TX thread can proceed. */
 	k_yield();
 
-	if (send_status < 0) {
-		printk("ARP req was not sent\n");
-		return false;
-	}
+	/**TESTPOINT: Check if ARP request sent*/
+	zassert_false(send_status < 0,
+		"ARP req was not sent");
 
 	net_pkt_unref(pkt);
 
-	printk("Network ARP checks passed\n");
+	/**TESTPOINT: Check gratuitous ARP */
+	if (IS_ENABLED(CONFIG_NET_ARP_GRATUITOUS)) {
+		struct net_eth_addr new_hwaddr = {
+			{ 0x11, 0x12, 0x13, 0x14, 0x15, 0x16 }
+		};
+		enum net_verdict verdict;
 
-	return true;
+		/* First make sure that we have an entry in cache */
+		entry_found = false;
+		expected_hwaddr = &hwaddr;
+		net_arp_foreach(arp_cb, &dst);
+		zassert_true(entry_found, "Entry not found");
+
+		pkt = net_pkt_get_reserve_rx(sizeof(struct net_eth_hdr),
+					     K_FOREVER);
+
+		zassert_not_null(pkt, "Out of mem RX request");
+
+		frag = net_pkt_get_frag(pkt, K_FOREVER);
+
+		zassert_not_null(frag, "Out of mem DATA request");
+
+		net_pkt_frag_add(pkt, frag);
+
+		net_pkt_set_iface(pkt, iface);
+
+		setup_eth_header(iface, pkt, net_eth_broadcast_addr(),
+				 NET_ETH_PTYPE_ARP);
+
+		arp_hdr = NET_ARP_HDR(pkt);
+
+		arp_hdr->hwtype = htons(NET_ARP_HTYPE_ETH);
+		arp_hdr->protocol = htons(NET_ETH_PTYPE_IP);
+		arp_hdr->hwlen = sizeof(struct net_eth_addr);
+		arp_hdr->protolen = sizeof(struct in_addr);
+		arp_hdr->opcode = htons(NET_ARP_REQUEST);
+		memcpy(&arp_hdr->src_hwaddr, &new_hwaddr, 6);
+		memcpy(&arp_hdr->dst_hwaddr, net_eth_broadcast_addr(), 6);
+		net_ipaddr_copy(&arp_hdr->dst_ipaddr, &dst);
+		net_ipaddr_copy(&arp_hdr->src_ipaddr, &dst);
+
+		net_buf_add(frag, sizeof(struct net_arp_hdr));
+
+		verdict = net_arp_input(pkt);
+		zassert_not_equal(verdict, NET_DROP, "Gratuitous ARP failed");
+
+		/* Then check that the HW address is changed for an existing
+		 * entry.
+		 */
+		entry_found = false;
+		expected_hwaddr = &new_hwaddr;
+		net_arp_foreach(arp_cb, &dst);
+		zassert_true(entry_found, "Changed entry not found");
+
+		net_pkt_unref(pkt);
+	}
 }
 
-void main(void)
+void test_main(void)
 {
-	k_thread_priority_set(k_current_get(), K_PRIO_COOP(7));
-
-	if (run_tests()) {
-		TC_END_REPORT(TC_PASS);
-	} else {
-		TC_END_REPORT(TC_FAIL);
-	}
+	ztest_test_suite(test_arp_fn,
+		ztest_unit_test(test_arp));
+	ztest_run_test_suite(test_arp_fn);
 }

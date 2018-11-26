@@ -15,10 +15,10 @@
 #include <toolchain.h>
 
 #define STACK_SIZE 2048
-#define NUMBER_OF_LOOPS 5000
+#define NUMBER_OF_LOOPS 1000
 
-extern char thread_stack1[STACK_SIZE];
-extern char thread_stack2[STACK_SIZE];
+extern K_THREAD_STACK_DEFINE(thread_stack1, STACK_SIZE);
+extern K_THREAD_STACK_DEFINE(thread_stack2, STACK_SIZE);
 extern struct k_thread thread_data1;
 extern struct k_thread thread_data2;
 
@@ -27,6 +27,8 @@ extern FILE *output_file;
 extern const char sz_success[];
 extern const char sz_partial[];
 extern const char sz_fail[];
+
+extern u32_t number_of_loops;
 
 #define sz_module_title_fmt	"\nMODULE: %s"
 #define sz_module_result_fmt	"\n\nPROJECT EXECUTION %s\n"

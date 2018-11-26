@@ -8,8 +8,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef __BYTEORDER_H__
-#define __BYTEORDER_H__
+#ifndef ZEPHYR_INCLUDE_MISC_BYTEORDER_H_
+#define ZEPHYR_INCLUDE_MISC_BYTEORDER_H_
 
 #include <zephyr/types.h>
 #include <stddef.h>
@@ -21,6 +21,14 @@
 				   (((x) >> 8) & 0xff00) | \
 				   (((x) & 0xff00) << 8) | \
 				   (((x) & 0xff) << 24)))
+#define __bswap_64(x) ((u64_t) ((((x) >> 56) & 0xff) | \
+				   (((x) >> 40) & 0xff00) | \
+				   (((x) >> 24) & 0xff0000) | \
+				   (((x) >> 8) & 0xff000000) | \
+				   (((x) & 0xff000000) << 8) | \
+				   (((x) & 0xff0000) << 24) | \
+				   (((x) & 0xff00) << 40) | \
+				   (((x) & 0xff) << 56)))
 
 /** @def sys_le16_to_cpu
  *  @brief Convert 16-bit integer from little-endian to host endianness.
@@ -93,8 +101,12 @@
 #define sys_cpu_to_be16(val) __bswap_16(val)
 #define sys_le32_to_cpu(val) (val)
 #define sys_cpu_to_le32(val) (val)
+#define sys_le64_to_cpu(val) (val)
+#define sys_cpu_to_le64(val) (val)
 #define sys_be32_to_cpu(val) __bswap_32(val)
 #define sys_cpu_to_be32(val) __bswap_32(val)
+#define sys_be64_to_cpu(val) __bswap_64(val)
+#define sys_cpu_to_be64(val) __bswap_64(val)
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #define sys_le16_to_cpu(val) __bswap_16(val)
 #define sys_cpu_to_le16(val) __bswap_16(val)
@@ -102,8 +114,12 @@
 #define sys_cpu_to_be16(val) (val)
 #define sys_le32_to_cpu(val) __bswap_32(val)
 #define sys_cpu_to_le32(val) __bswap_32(val)
+#define sys_le64_to_cpu(val) __bswap_64(val)
+#define sys_cpu_to_le64(val) __bswap_64(val)
 #define sys_be32_to_cpu(val) (val)
 #define sys_cpu_to_be32(val) (val)
+#define sys_be64_to_cpu(val) (val)
+#define sys_cpu_to_be64(val) (val)
 #else
 #error "Unknown byte order"
 #endif
@@ -273,14 +289,17 @@ static inline u64_t sys_get_le64(const u8_t src[8])
  */
 static inline void sys_memcpy_swap(void *dst, const void *src, size_t length)
 {
-	__ASSERT(((src < dst && (src + length) <= dst) ||
-		  (src > dst && (dst + length) <= src)),
+	u8_t *pdst = (u8_t *)dst;
+	const u8_t *psrc = (const u8_t *)src;
+
+	__ASSERT(((psrc < pdst && (psrc + length) <= pdst) ||
+		  (psrc > pdst && (pdst + length) <= psrc)),
 		 "Source and destination buffers must not overlap");
 
-	src += length - 1;
+	psrc += length - 1;
 
 	for (; length > 0; length--) {
-		*((u8_t *)dst++) = *((u8_t *)src--);
+		*pdst++ = *psrc--;
 	}
 }
 
@@ -306,4 +325,4 @@ static inline void sys_mem_swap(void *buf, size_t length)
 	}
 }
 
-#endif /* __BYTEORDER_H__ */
+#endif /* ZEPHYR_INCLUDE_MISC_BYTEORDER_H_ */

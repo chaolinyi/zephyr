@@ -1,5 +1,3 @@
-/* main.c - load/store portion of FPU sharing test */
-
 /*
  * Copyright (c) 2011-2014 Wind River Systems, Inc.
  *
@@ -7,9 +5,14 @@
  */
 
 /*
- * DESCRIPTION
- * This module implements the load/store portion of the FPU sharing test. This
- * version of this test utilizes a pair of tasks.
+ * @brief load/store portion of FPU sharing test
+ *
+ * @defgroup kernel_fpsharing_tests FP Sharing Tests
+ *
+ * @ingroup all_tests
+ *
+ * @details This module implements the load/store portion of the
+ * FPU sharing test. This version of this test utilizes a pair of tasks.
  *
  * The load/store test validates the floating point unit context
  * save/restore mechanism. This test utilizes a pair of threads of different
@@ -24,10 +27,12 @@
  * this test should be enhanced to ensure that the architectures' _Swap()
  * routine doesn't context switch more registers that it needs to (which would
  * represent a performance issue).  For example, on the IA-32, the test should
- * issue a fiber_fp_disable() from main(), and then indicate that only x87 FPU
- * registers will be utilized (fiber_fp_enable()).  The fiber should continue
+ * issue a k_fp_disable() from main(), and then indicate that only x87 FPU
+ * registers will be utilized (k_fp_enable()).  The thread should continue
  * to load ALL non-integer registers, but main() should validate that only the
  * x87 FPU registers are being saved/restored.
+ * @{
+ * @}
  */
 
 #ifndef CONFIG_FLOAT
@@ -47,20 +52,19 @@
 #include <zephyr.h>
 
 #if defined(CONFIG_ISA_IA32)
-  #if defined(__GNUC__)
-    #include <float_regs_x86_gcc.h>
-  #else
-    #include <float_regs_x86_other.h>
-  #endif /* __GNUC__ */
-#elif defined(CONFIG_CPU_CORTEX_M4)
-  #if defined(__GNUC__)
-    #include <float_regs_arm_gcc.h>
-  #else
-    #include <float_regs_arm_other.h>
-  #endif /* __GNUC__ */
+#if defined(__GNUC__)
+#include "float_regs_x86_gcc.h"
+#else
+#include "float_regs_x86_other.h"
+#endif /* __GNUC__ */
+#elif defined(CONFIG_ARMV7_M_ARMV8_M_FP)
+#if defined(__GNUC__)
+#include "float_regs_arm_gcc.h"
+#else
+#include "float_regs_arm_other.h"
+#endif /* __GNUC__ */
 #endif
 
-#include <arch/cpu.h>
 #include <tc_util.h>
 #include "float_context.h"
 #include <stddef.h>
@@ -93,7 +97,6 @@ int fpu_sharing_error;
 static volatile unsigned int load_store_low_count;
 static volatile unsigned int load_store_high_count;
 
-extern u32_t _tick_get_32(void);
 extern void calculate_pi_low(void);
 extern void calculate_pi_high(void);
 
@@ -101,7 +104,10 @@ extern void calculate_pi_high(void);
  *
  * @brief Low priority FPU load/store thread
  *
- * @return N/A
+ * @ingroup kernel_fpsharing_tests
+ *
+ * @see k_sched_time_slice_set(), memset(),
+ * _load_all_float_registers(), _store_all_float_registers()
  */
 
 void load_store_low(void)
@@ -148,7 +154,7 @@ void load_store_low(void)
 		 * floating point values that have been saved.
 		 */
 
-		memset(&float_reg_set_store, 0, SIZEOF_FP_REGISTER_SET);
+		(void)memset(&float_reg_set_store, 0, SIZEOF_FP_REGISTER_SET);
 
 		/*
 		 * Utilize an architecture specific function to load all the
@@ -162,11 +168,11 @@ void load_store_low(void)
 		 * thread an opportunity to run when the low priority thread is
 		 * using the floating point registers.
 		 *
-		 * IMPORTANT: This logic requires that sys_tick_get_32() not
+		 * IMPORTANT: This logic requires that z_tick_get_32() not
 		 * perform any floating point operations!
 		 */
 
-		while ((_tick_get_32() % 5) != 0) {
+		while ((z_tick_get_32() % 5) != 0) {
 			/*
 			 * Use a volatile variable to prevent compiler
 			 * optimizing out the spin loop.
@@ -247,7 +253,9 @@ void load_store_low(void)
  *
  * @brief High priority FPU load/store thread
  *
- * @return N/A
+ * @ingroup kernel_fpsharing_tests
+ *
+ * @see _load_then_store_all_float_registers()
  */
 
 void load_store_high(void)

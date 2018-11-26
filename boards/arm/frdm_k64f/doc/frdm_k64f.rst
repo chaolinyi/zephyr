@@ -76,12 +76,20 @@ The frdm_k64f board configuration supports the following hardware features:
 +-----------+------------+-------------------------------------+
 | SPI       | on-chip    | spi                                 |
 +-----------+------------+-------------------------------------+
+| WATCHDOG  | on-chip    | watchdog                            |
++-----------+------------+-------------------------------------+
+| ADC       | on-chip    | adc                                 |
++-----------+------------+-------------------------------------+
+| PWM       | on-chip    | pwm                                 |
++-----------+------------+-------------------------------------+
 | ETHERNET  | on-chip    | ethernet                            |
 +-----------+------------+-------------------------------------+
 | UART      | on-chip    | serial port-polling;                |
 |           |            | serial port-interrupt               |
 +-----------+------------+-------------------------------------+
 | FLASH     | on-chip    | soc flash                           |
++-----------+------------+-------------------------------------+
+| USB       | on-chip    | USB device                          |
 +-----------+------------+-------------------------------------+
 | SENSOR    | off-chip   | fxos8700 polling;                   |
 |           |            | fxos8700 trigger                    |
@@ -113,21 +121,27 @@ The K64F SoC has five pairs of pinmux/gpio controllers.
 +-------+-----------------+---------------------------+
 | PTA4  | GPIO            | SW3                       |
 +-------+-----------------+---------------------------+
+| PTB10 | ADC             | ADC1 channel 14           |
++-------+-----------------+---------------------------+
 | PTB16 | UART0_RX        | UART Console              |
 +-------+-----------------+---------------------------+
 | PTB17 | UART0_TX        | UART Console              |
++-------+-----------------+---------------------------+
+| PTC8  | PWM             | PWM_3 channel 4           |
++-------+-----------------+---------------------------+
+| PTC9  | PWM             | PWM_3 channel 5           |
 +-------+-----------------+---------------------------+
 | PTC16 | UART3_RX        | UART BT HCI               |
 +-------+-----------------+---------------------------+
 | PTC17 | UART3_TX        | UART BT HCI               |
 +-------+-----------------+---------------------------+
-| PTCD0 | SPI0_PCS0       | SPI                       |
+| PTD0  | SPI0_PCS0       | SPI                       |
 +-------+-----------------+---------------------------+
-| PTCD1 | SPI0_SCK        | SPI                       |
+| PTD1  | SPI0_SCK        | SPI                       |
 +-------+-----------------+---------------------------+
-| PTCD2 | SPI0_SOUT       | SPI                       |
+| PTD2  | SPI0_SOUT       | SPI                       |
 +-------+-----------------+---------------------------+
-| PTCD3 | SPI0_SIN        | SPI                       |
+| PTD3  | SPI0_SIN        | SPI                       |
 +-------+-----------------+---------------------------+
 | PTE24 | I2C0_SCL        | I2C / FXOS8700            |
 +-------+-----------------+---------------------------+
@@ -178,6 +192,13 @@ Serial Port
 The K64F SoC has six UARTs. One is configured for the console, another for BT
 HCI, and the remaining are not used.
 
+USB
+===
+
+The K64F SoC has a USB OTG (USBOTG) controller that supports both
+device and host functions through its micro USB connector (K64F USB).
+Only USB device function is supported in Zephyr at the moment.
+
 Programming and Debugging
 *************************
 
@@ -186,25 +207,32 @@ into the board to provide debugging, flash programming, and serial
 communication over USB.
 
 To use the pyOCD tools with OpenSDA, follow the instructions in the
-:ref:`nxp_opensda_pyocd` page using the `DAPLink FRDM-K64F Firmware`_.
+:ref:`nxp_opensda_pyocd` page using the `DAPLink FRDM-K64F Firmware`_. The
+pyOCD tools are the default for this board, therefore it is not necessary to
+set ``OPENSDA_FW=daplink`` explicitly when using the default flash and debug
+mechanisms.
+
+With these mechanisms, applications for the ``frdm_k64f`` board
+configuration can be built and flashed in the usual way (see
+:ref:`build_an_application` and :ref:`application_run` for more
+details).
 
 To use the Segger J-Link tools with OpenSDA, follow the instructions in the
 :ref:`nxp_opensda_jlink` page using the `Segger J-Link OpenSDA V2.1 Firmware`_.
+The Segger J-Link tools are not the default for this board, therefore it is
+necessary to set ``OPENSDA_FW=jlink`` explicitly in the environment before
+programming and debugging.
 
 Flashing
 ========
 
 This example uses the :ref:`hello_world` sample with the
-:ref:`nxp_opensda_pyocd` tools. Use the ``make flash`` build target to build
-your Zephyr application, invoke the pyOCD flash tool and program your Zephyr
-application to flash.
+:ref:`nxp_opensda_pyocd` tools.
 
-.. code-block:: console
-
-   $ cd <zephyr_root_path>
-   $ . zephyr-env.sh
-   $ cd samples/hello_world/
-   $ make BOARD=frdm_k64f flash
+.. zephyr-app-commands::
+   :zephyr-app: samples/hello_world
+   :board: frdm_k64f
+   :goals: flash
 
 Open a serial terminal (minicom, putty, etc.) with the following settings:
 
@@ -223,18 +251,14 @@ the following message:
 Debugging
 =========
 
-This example uses the :ref:`hello_world` sample with the
-:ref:`nxp_opensda_pyocd` tools. Use the ``make debug`` build target to build
-your Zephyr application, invoke the pyOCD GDB server, attach a GDB client, and
-program your Zephyr application to flash. It will leave you at a gdb prompt.
+You can debug an application in the usual way.  Here is an example for the
+:ref:`hello_world` application.
 
-.. code-block:: console
-
-   $ cd <zephyr_root_path>
-   $ . zephyr-env.sh
-   $ cd samples/hello_world/
-   $ make BOARD=frdm_k64f debug
-
+.. zephyr-app-commands::
+   :zephyr-app: samples/hello_world
+   :board: frdm_k64f
+   :maybe-skip-config:
+   :goals: debug
 
 .. _FRDM-K64F Website:
    http://www.nxp.com/products/software-and-tools/hardware-development-tools/freedom-development-boards/freedom-development-platform-for-kinetis-k64-k63-and-k24-mcus:FRDM-K64F

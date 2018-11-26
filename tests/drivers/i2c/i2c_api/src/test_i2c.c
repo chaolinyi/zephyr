@@ -17,20 +17,12 @@
 #include <ztest.h>
 
 #ifdef CONFIG_ARC
-#define I2C_DEV_NAME CONFIG_I2C_SS_0_NAME
+#define I2C_DEV_NAME DT_I2C_SS_0_NAME
 #else
 #define I2C_DEV_NAME CONFIG_I2C_0_NAME
 #endif
 
-static union dev_config i2c_cfg = {
-	.raw = 0,
-	.bits = {
-		.use_10_bit_addr = 0,
-		.is_master_device = 1,
-		.speed = I2C_SPEED_STANDARD,
-		.is_slave_read = 0,
-	},
-};
+u32_t i2c_cfg = I2C_SPEED_SET(I2C_SPEED_STANDARD) | I2C_MODE_MASTER;
 
 static int test_gy271(void)
 {
@@ -43,7 +35,7 @@ static int test_gy271(void)
 	}
 
 	/* 1. Verify i2c_configure() */
-	if (i2c_configure(i2c_dev, i2c_cfg.raw)) {
+	if (i2c_configure(i2c_dev, i2c_cfg)) {
 		TC_PRINT("I2C config failed\n");
 		return TC_FAIL;
 	}
@@ -72,7 +64,7 @@ static int test_gy271(void)
 		return TC_FAIL;
 	}
 
-	memset(datas, 0, sizeof(datas));
+	(void)memset(datas, 0, sizeof(datas));
 
 	/* 3. verify i2c_read() */
 	if (i2c_read(i2c_dev, datas, 6, 0x1E)) {
@@ -98,7 +90,7 @@ static int test_burst_gy271(void)
 	}
 
 	/* 1. verify i2c_configure() */
-	if (i2c_configure(i2c_dev, i2c_cfg.raw)) {
+	if (i2c_configure(i2c_dev, i2c_cfg)) {
 		TC_PRINT("I2C config failed\n");
 		return TC_FAIL;
 	}
@@ -116,7 +108,7 @@ static int test_burst_gy271(void)
 
 	k_sleep(1);
 
-	memset(datas, 0, sizeof(datas));
+	(void)memset(datas, 0, sizeof(datas));
 
 	/* 3. verify i2c_burst_read() */
 	if (i2c_burst_read(i2c_dev, 0x1E, 0x03, datas, 6)) {

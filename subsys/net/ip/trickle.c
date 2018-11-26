@@ -10,10 +10,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if defined(CONFIG_NET_DEBUG_TRICKLE)
-#define SYS_LOG_DOMAIN "net/trickle"
-#define NET_LOG_ENABLED 1
-#endif
+#define LOG_MODULE_NAME net_trickle
+#define NET_LOG_LEVEL CONFIG_NET_TRICKLE_LOG_LEVEL
 
 #include <errno.h>
 #include <misc/util.h>
@@ -55,10 +53,7 @@ static void double_interval_timeout(struct k_work *work)
 						   struct net_trickle,
 						   timer);
 	u32_t rand_time;
-
-#if defined(CONFIG_NET_DEBUG_TRICKLE)
 	u32_t last_end = get_end(trickle);
-#endif
 
 	trickle->c = 0;
 
@@ -97,7 +92,7 @@ static inline void reschedule(struct net_trickle *trickle)
 	NET_DBG("now %d end in %d", now, diff);
 
 	/* Did the clock wrap */
-	if (diff > (TICK_MAX >> 1)) {
+	if ((s32_t)diff < 0) {
 		diff = 0;
 		NET_DBG("Clock wrap");
 	}
@@ -156,12 +151,14 @@ int net_trickle_create(struct net_trickle *trickle,
 {
 	NET_ASSERT(trickle && Imax > 0 && k > 0 && !CHECK_IMIN(Imin));
 
-	memset(trickle, 0, sizeof(struct net_trickle));
+	(void)memset(trickle, 0, sizeof(struct net_trickle));
 
 	trickle->Imin = Imin;
 	trickle->Imax = Imax;
 	trickle->Imax_abs = Imin << Imax;
 	trickle->k = k;
+
+	NET_ASSERT(trickle->Imax_abs);
 
 	NET_DBG("Imin %d Imax %u k %u Imax_abs %d",
 		trickle->Imin, trickle->Imax, trickle->k,

@@ -2,8 +2,6 @@
   ******************************************************************************
   * @file    stm32f7xx_ll_system.h
   * @author  MCD Application Team
-  * @version V1.2.0
-  * @date    30-December-2016
   * @brief   Header file of SYSTEM LL module.
   @verbatim
   ==============================================================================
@@ -20,7 +18,7 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; COPYRIGHT(c) 2016 STMicroelectronics</center></h2>
+  * <h2><center>&copy; COPYRIGHT(c) 2017 STMicroelectronics</center></h2>
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -203,7 +201,7 @@ extern "C" {
 #define LL_SYSCFG_TIMBREAK_LOCKUP          SYSCFG_CBR_CLL     /*!< Enables and locks the Lockup output (raised during core
                                                                    lockup state) of Cortex-M7 with Break Input of TIMER1, TIMER8 */
 #define LL_SYSCFG_TIMBREAK_PVD             SYSCFG_CBR_PVDL    /*!< Enables and locks the PVD connection with TIMER1, TIMER8 Break input.
-                                                                   It also locks (write protect) the PVD_EN and PVDSEL[2:0] bits 
+                                                                   It also locks (write protect) the PVD_EN and PVDSEL[2:0] bits
                                                                    of the power controller */
 #endif /* SYSCFG_CBR_CLL */
 /**
@@ -214,9 +212,6 @@ extern "C" {
   */
 #define LL_SYSCFG_DISABLE_CMP_PD          0x00000000U             /*!< I/O compensation cell power-down mode */
 #define LL_SYSCFG_ENABLE_CMP_PD           SYSCFG_CMPCR_CMP_PD     /*!< I/O compensation cell enabled */
-/**
-  * @}
-  */
 /**
   * @}
   */

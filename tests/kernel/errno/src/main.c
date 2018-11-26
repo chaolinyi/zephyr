@@ -1,16 +1,26 @@
 /*
- * Copyright (c) 2015 Wind River Systems, Inc.
+ * Copyright (c) 2017 Intel Corporation
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <ztest.h>
 #include <zephyr.h>
 #include <errno.h>
-#include <tc_util.h>
 
+/**
+ * @brief Test the thread context
+ *
+ * @defgroup kernel_threadcontext_tests Thread Context Tests
+ *
+ * @ingroup all_tests
+ *
+ * @{
+ * @}
+ */
 #define N_THREADS 2
-
 #define STACK_SIZE 384
+
 static K_THREAD_STACK_ARRAY_DEFINE(stacks, N_THREADS, STACK_SIZE);
 static struct k_thread threads[N_THREADS];
 
@@ -29,40 +39,45 @@ struct result result[N_THREADS];
 
 struct k_fifo fifo;
 
-static void errno_fiber(int n, int my_errno)
+static void errno_thread(int n, int my_errno)
 {
 	errno = my_errno;
-
-	printk("co-op thread %d, errno before sleep: %x\n", n, errno);
 
 	k_sleep(30 - (n * 10));
 	if (errno == my_errno) {
 		result[n].pass = 1;
 	}
 
-	printk("co-op thread %d, errno after sleep:  %x\n", n, errno);
+	zassert_equal(errno, my_errno, NULL);
 
 	k_fifo_put(&fifo, &result[n]);
 }
 
-void main(void)
+/**
+ * @brief Verify thread context
+ *
+ * @ingroup kernel_threadcontext_tests
+ *
+ * @details Check whether variable value per-thread are saved during
+ *	context switch
+ */
+void test_thread_context(void)
 {
-	int rv = TC_PASS;
+	int rv = TC_PASS, test_errno;
 
-	TC_START("kernel_errno");
 	k_fifo_init(&fifo);
 
 	errno = errno_values[N_THREADS];
-
-	printk("main thread, errno before starting co-op threads: %x\n", errno);
+	test_errno = errno;
 
 	for (int ii = 0; ii < N_THREADS; ii++) {
 		result[ii].pass = TC_FAIL;
 	}
 
+	/**TESTPOINT: thread- threads stacks are separate */
 	for (int ii = 0; ii < N_THREADS; ii++) {
 		k_thread_create(&threads[ii], stacks[ii], STACK_SIZE,
-				(k_thread_entry_t) errno_fiber,
+				(k_thread_entry_t) errno_thread,
 				(void *) ii, (void *) errno_values[ii], NULL,
 				K_PRIO_PREEMPT(ii + 5), 0, K_NO_WAIT);
 	}
@@ -75,12 +90,16 @@ void main(void)
 		}
 	}
 
-	printk("main thread, errno after running co-op threads: %x\n", errno);
+	zassert_equal(errno, test_errno, NULL);
 
 	if (errno != errno_values[N_THREADS]) {
 		rv = TC_FAIL;
 	}
+}
 
-	TC_END_RESULT(rv);
-	TC_END_REPORT(rv);
+void test_main(void)
+{
+	ztest_test_suite(context_errno,
+			ztest_unit_test(test_thread_context));
+	ztest_run_test_suite(context_errno);
 }

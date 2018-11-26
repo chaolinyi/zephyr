@@ -1,10 +1,9 @@
 sample:
-    description: >
-      Environmental Sensing sample using BLE and sensor features on
-      Arduino 101.
-    name: Environmental Sensing (Application Processor Part)
+  description: Environmental Sensing sample using BLE
+    and sensor features on Arduino 101.
+  name: Environmental Sensing (Application Processor Part)
 tests:
--   test-nimble:
-        build_only: true
-        platform_whitelist: arduino_101
-        tags: samples
+  test:
+    platform_whitelist: arduino_101
+    tags: sensors
+    harness: sensor

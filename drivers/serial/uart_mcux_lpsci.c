@@ -7,13 +7,14 @@
 #include <errno.h>
 #include <device.h>
 #include <uart.h>
+#include <clock_control.h>
 #include <fsl_lpsci.h>
-#include <fsl_clock.h>
 #include <soc.h>
 
 struct mcux_lpsci_config {
 	UART0_Type *base;
-	clock_name_t clock_source;
+	char *clock_name;
+	clock_control_subsys_t clock_subsys;
 	u32_t baud_rate;
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	void (*irq_config_func)(struct device *dev);
@@ -22,7 +23,8 @@ struct mcux_lpsci_config {
 
 struct mcux_lpsci_data {
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
-	uart_irq_callback_t callback;
+	uart_irq_callback_user_data_t callback;
+	void *cb_data;
 #endif
 };
 
@@ -209,11 +211,13 @@ static int mcux_lpsci_irq_update(struct device *dev)
 }
 
 static void mcux_lpsci_irq_callback_set(struct device *dev,
-				       uart_irq_callback_t cb)
+				       uart_irq_callback_user_data_t cb,
+				       void *cb_data)
 {
 	struct mcux_lpsci_data *data = dev->driver_data;
 
 	data->callback = cb;
+	data->cb_data = cb_data;
 }
 
 static void mcux_lpsci_isr(void *arg)
@@ -222,7 +226,7 @@ static void mcux_lpsci_isr(void *arg)
 	struct mcux_lpsci_data *data = dev->driver_data;
 
 	if (data->callback) {
-		data->callback(dev);
+		data->callback(data->cb_data);
 	}
 }
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
@@ -231,9 +235,18 @@ static int mcux_lpsci_init(struct device *dev)
 {
 	const struct mcux_lpsci_config *config = dev->config->config_info;
 	lpsci_config_t uart_config;
+	struct device *clock_dev;
 	u32_t clock_freq;
 
-	clock_freq = CLOCK_GetFreq(config->clock_source);
+	clock_dev = device_get_binding(config->clock_name);
+	if (clock_dev == NULL) {
+		return -EINVAL;
+	}
+
+	if (clock_control_get_rate(clock_dev, config->clock_subsys,
+				   &clock_freq)) {
+		return -EINVAL;
+	}
 
 	LPSCI_GetDefaultConfig(&uart_config);
 	uart_config.enableTx = true;
@@ -279,8 +292,10 @@ static void mcux_lpsci_config_func_0(struct device *dev);
 
 static const struct mcux_lpsci_config mcux_lpsci_0_config = {
 	.base = UART0,
-	.clock_source = UART0_CLK_SRC,
-	.baud_rate = NXP_KINETIS_LPSCI_4006A000_CURRENT_SPEED,
+	.clock_name = DT_UART_MCUX_LPSCI_0_CLOCK_NAME,
+	.clock_subsys =
+		(clock_control_subsys_t)DT_UART_MCUX_LPSCI_0_CLOCK_SUBSYS,
+	.baud_rate = DT_NXP_KINETIS_LPSCI_4006A000_CURRENT_SPEED,
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	.irq_config_func = mcux_lpsci_config_func_0,
 #endif
@@ -288,7 +303,7 @@ static const struct mcux_lpsci_config mcux_lpsci_0_config = {
 
 static struct mcux_lpsci_data mcux_lpsci_0_data;
 
-DEVICE_AND_API_INIT(uart_0, CONFIG_UART_MCUX_LPSCI_0_NAME,
+DEVICE_AND_API_INIT(uart_0, DT_UART_MCUX_LPSCI_0_NAME,
 		    &mcux_lpsci_init,
 		    &mcux_lpsci_0_data, &mcux_lpsci_0_config,
 		    PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
@@ -297,11 +312,11 @@ DEVICE_AND_API_INIT(uart_0, CONFIG_UART_MCUX_LPSCI_0_NAME,
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 static void mcux_lpsci_config_func_0(struct device *dev)
 {
-	IRQ_CONNECT(NXP_KINETIS_LPSCI_4006A000_IRQ_0,
-		    NXP_KINETIS_LPSCI_4006A000_IRQ_0_PRIORITY,
+	IRQ_CONNECT(DT_NXP_KINETIS_LPSCI_4006A000_IRQ_0,
+		    DT_NXP_KINETIS_LPSCI_4006A000_IRQ_0_PRIORITY,
 		    mcux_lpsci_isr, DEVICE_GET(uart_0), 0);
 
-	irq_enable(NXP_KINETIS_LPSCI_4006A000_IRQ_0);
+	irq_enable(DT_NXP_KINETIS_LPSCI_4006A000_IRQ_0);
 }
 #endif
 

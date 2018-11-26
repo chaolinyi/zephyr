@@ -38,10 +38,8 @@
  * SUCH DAMAGE.
  */
 
-#if defined(CONFIG_NET_DEBUG_RPL)
-#define SYS_LOG_DOMAIN "net/rpl"
-#define NET_LOG_ENABLED 1
-#endif
+#define LOG_MODULE_NAME net_rpl_of0
+#define NET_LOG_LEVEL CONFIG_NET_RPL_LOG_LEVEL
 
 #include <kernel.h>
 #include <limits.h>
@@ -116,27 +114,16 @@ net_rpl_of0_best_parent(struct net_if *iface,
 		return dag->preferred_parent;
 	}
 
-#if defined(CONFIG_NET_DEBUG_RPL)
-	do {
-		char out[NET_IPV6_ADDR_LEN];
-
-		snprintk(out, sizeof(out), "%s",
-			 net_sprint_ipv6_addr(
-				 net_rpl_get_parent_addr(iface,
-							 parent2)));
-
-		NET_DBG("Comparing parent %s (confidence %d, rank %d) with "
-			"parent %s (confidence %d, rank %d)",
-			net_sprint_ipv6_addr(
-				net_rpl_get_parent_addr(iface,
-							parent1)),
-			net_ipv6_nbr_data(nbr1)->link_metric,
-			parent1->rank,
-			out,
-			net_ipv6_nbr_data(nbr2)->link_metric,
-			parent2->rank);
-	} while (0);
-#endif /* CONFIG_NET_DEBUG_RPL */
+	NET_DBG("Comparing parent %s (confidence %d, rank %d) with "
+		"parent %s (confidence %d, rank %d)",
+		log_strdup(net_sprint_ipv6_addr(
+				   net_rpl_get_parent_addr(iface, parent1))),
+		net_ipv6_nbr_data(nbr1)->link_metric,
+		parent1->rank,
+		log_strdup(net_sprint_ipv6_addr(
+				   net_rpl_get_parent_addr(iface, parent2)))),
+		net_ipv6_nbr_data(nbr2)->link_metric,
+		parent2->rank);
 
 	rank1 = NET_RPL_DAG_RANK(parent1->rank,
 				 parent1->dag->instance) *
@@ -200,7 +187,7 @@ struct net_rpl_dag *net_rpl_of_best_dag(struct net_rpl_dag *dag1,
 	ALIAS_OF(net_rpl_of0_best_dag);
 
 static u16_t net_rpl_of0_calc_rank(struct net_rpl_parent *parent,
-				      u16_t base_rank)
+				   u16_t base_rank)
 {
 	u16_t increment;
 
@@ -226,7 +213,7 @@ static u16_t net_rpl_of0_calc_rank(struct net_rpl_parent *parent,
 }
 
 u16_t net_rpl_of_calc_rank(struct net_rpl_parent *parent,
-			      u16_t base_rank)
+			   u16_t base_rank)
 	ALIAS_OF(net_rpl_of0_calc_rank);
 
 static int net_rpl_of0_update_mc(struct net_rpl_instance *instance)

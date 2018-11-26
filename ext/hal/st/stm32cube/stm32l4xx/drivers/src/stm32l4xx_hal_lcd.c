@@ -2,8 +2,6 @@
   ******************************************************************************
   * @file    stm32l4xx_hal_lcd.c
   * @author  MCD Application Team
-  * @version V1.7.1
-  * @date    21-April-2017
   * @brief   LCD Controller HAL module driver.
   *          This file provides firmware functions to manage the following
   *          functionalities of the LCD Controller (LCD) peripheral:
@@ -18,13 +16,13 @@
       [..] The LCD HAL driver can be used as follows:
 
       (#) Declare a LCD_HandleTypeDef handle structure.
-      
+
       -@- The frequency generator allows you to achieve various LCD frame rates
           starting from an LCD input clock frequency (LCDCLK) which can vary
-          from 32 kHz up to 1 MHz.      
-      
+          from 32 kHz up to 1 MHz.
+
       (#) Initialize the LCD low level resources by implementing the HAL_LCD_MspInit() API:
-                  
+
           (++) Enable the LCDCLK (same as RTCCLK): to configure the RTCCLK/LCDCLK, proceed as follows:
                (+++) Use RCC function HAL_RCCEx_PeriphCLKConfig in indicating RCC_PERIPHCLK_LCD and
                   selected clock source (HSE, LSI or LSE)
@@ -34,7 +32,7 @@
               (+++) Configure these LCD pins as alternate function no-pull.
           (++) Enable the LCD interface clock.
 
-      
+
       (#) Program the Prescaler, Divider, Blink mode, Blink Frequency Duty, Bias,
           Voltage Source, Dead Time, Pulse On Duration, Contrast, High drive and Multiplexer
           Segment in the Init structure of the LCD handle.

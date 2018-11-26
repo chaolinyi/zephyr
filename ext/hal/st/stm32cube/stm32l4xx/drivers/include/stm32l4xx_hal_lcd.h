@@ -2,8 +2,6 @@
   ******************************************************************************
   * @file    stm32l4xx_hal_lcd.h
   * @author  MCD Application Team
-  * @version V1.7.1
-  * @date    21-April-2017
   * @brief   Header file of LCD Controller HAL module.
   ******************************************************************************
   * @attention
@@ -132,7 +130,7 @@ typedef struct
 
 /** @defgroup  LCD_ErrorCode LCD Error Code
   * @{
-  */ 
+  */
 #define HAL_LCD_ERROR_NONE       ((uint32_t)0x00)    /*!< No error */
 #define HAL_LCD_ERROR_FCRSF      ((uint32_t)0x01)    /*!< Synchro flag timeout error */
 #define HAL_LCD_ERROR_UDR        ((uint32_t)0x02)    /*!< Update display request flag timeout error */
@@ -142,7 +140,7 @@ typedef struct
 /**
   * @}
   */
-  
+
 /** @defgroup LCD_Prescaler LCD Prescaler
   * @{
   */

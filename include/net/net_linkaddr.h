@@ -9,8 +9,8 @@
  * @brief Public API for network link address
  */
 
-#ifndef __NET_LINKADDR_H__
-#define __NET_LINKADDR_H__
+#ifndef ZEPHYR_INCLUDE_NET_NET_LINKADDR_H_
+#define ZEPHYR_INCLUDE_NET_NET_LINKADDR_H_
 
 #include <zephyr/types.h>
 #include <stdbool.h>
@@ -19,6 +19,13 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @brief Network link address library
+ * @defgroup net_linkaddr Network Link Address Library
+ * @ingroup networking
+ * @{
+ */
 
 #ifdef CONFIG_NET_L2_IEEE802154
 #define NET_LINK_ADDR_MAX_LENGTH 8
@@ -38,7 +45,7 @@ enum net_link_type {
 	NET_LINK_BLUETOOTH,
 	NET_LINK_ETHERNET,
 	NET_LINK_DUMMY,
-};
+} __packed;
 
 /**
  *  @brief Hardware link address structure
@@ -125,8 +132,12 @@ static inline int net_linkaddr_set(struct net_linkaddr_storage *lladdr_store,
 	return 0;
 }
 
+/**
+ * @}
+ */
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __NET_LINKADDR_H__ */
+#endif /* ZEPHYR_INCLUDE_NET_NET_LINKADDR_H_ */

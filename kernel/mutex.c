@@ -14,7 +14,7 @@
  * priority thread waiting on the mutex.
  *
  * Each mutex that contributes to priority inheritance must be released in the
- * reverse order in which is was acquired.  Furthermore each subsequent mutex
+ * reverse order in which it was acquired.  Furthermore each subsequent mutex
  * that contributes to raising the owning thread's priority level must be
  * acquired at a point after the most recent "bumping" of the priority level.
  *
@@ -35,9 +35,11 @@
 #include <debug/object_tracing_common.h>
 #include <errno.h>
 #include <init.h>
+#include <syscall_handler.h>
+#include <tracing.h>
 
-#define RECORD_STATE_CHANGE(mutex) do { } while ((0))
-#define RECORD_CONFLICT(mutex) do { } while ((0))
+#define RECORD_STATE_CHANGE(mutex) do { } while (false)
+#define RECORD_CONFLICT(mutex) do { } while (false)
 
 
 extern struct k_mutex _k_mutex_list_start[];
@@ -66,20 +68,31 @@ SYS_INIT(init_mutex_module, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_OBJECTS);
 
 #endif /* CONFIG_OBJECT_TRACING */
 
-void k_mutex_init(struct k_mutex *mutex)
+void _impl_k_mutex_init(struct k_mutex *mutex)
 {
 	mutex->owner = NULL;
 	mutex->lock_count = 0;
 
-	/* initialized upon first use */
-	/* mutex->owner_orig_prio = 0; */
+	sys_trace_void(SYS_TRACE_ID_MUTEX_INIT);
 
-	sys_dlist_init(&mutex->wait_q);
+	_waitq_init(&mutex->wait_q);
 
 	SYS_TRACING_OBJ_INIT(k_mutex, mutex);
+	_k_object_init(mutex);
+	sys_trace_end_call(SYS_TRACE_ID_MUTEX_INIT);
 }
 
-static int new_prio_for_inheritance(int target, int limit)
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(k_mutex_init, mutex)
+{
+	Z_OOPS(Z_SYSCALL_OBJ_INIT(mutex, K_OBJ_MUTEX));
+	_impl_k_mutex_init((struct k_mutex *)mutex);
+
+	return 0;
+}
+#endif
+
+static s32_t new_prio_for_inheritance(s32_t target, s32_t limit)
 {
 	int new_prio = _is_prio_higher(target, limit) ? target : limit;
 
@@ -88,7 +101,7 @@ static int new_prio_for_inheritance(int target, int limit)
 	return new_prio;
 }
 
-static void adjust_owner_prio(struct k_mutex *mutex, int new_prio)
+static void adjust_owner_prio(struct k_mutex *mutex, s32_t new_prio)
 {
 	if (mutex->owner->base.prio != new_prio) {
 
@@ -101,17 +114,19 @@ static void adjust_owner_prio(struct k_mutex *mutex, int new_prio)
 	}
 }
 
-int k_mutex_lock(struct k_mutex *mutex, s32_t timeout)
+int _impl_k_mutex_lock(struct k_mutex *mutex, s32_t timeout)
 {
-	int new_prio, key;
+	int new_prio;
+	u32_t key;
 
+	sys_trace_void(SYS_TRACE_ID_MUTEX_LOCK);
 	_sched_lock();
 
-	if (likely(mutex->lock_count == 0 || mutex->owner == _current)) {
+	if (likely((mutex->lock_count == 0U) || (mutex->owner == _current))) {
 
 		RECORD_STATE_CHANGE();
 
-		mutex->owner_orig_prio = mutex->lock_count == 0 ?
+		mutex->owner_orig_prio = (mutex->lock_count == 0U) ?
 					_current->base.prio :
 					mutex->owner_orig_prio;
 
@@ -123,23 +138,19 @@ int k_mutex_lock(struct k_mutex *mutex, s32_t timeout)
 			mutex->owner_orig_prio);
 
 		k_sched_unlock();
+		sys_trace_end_call(SYS_TRACE_ID_MUTEX_LOCK);
 
 		return 0;
 	}
 
 	RECORD_CONFLICT();
 
-	if (unlikely(timeout == K_NO_WAIT)) {
+	if (unlikely(timeout == (s32_t)K_NO_WAIT)) {
 		k_sched_unlock();
+		sys_trace_end_call(SYS_TRACE_ID_MUTEX_LOCK);
 		return -EBUSY;
 	}
 
-#if 0
-	if (_is_prio_higher(_current->prio, mutex->owner->prio)) {
-		new_prio = _current->prio;
-	}
-	new_prio = _get_new_prio_with_ceiling(new_prio);
-#endif
 	new_prio = new_prio_for_inheritance(_current->base.prio,
 					    mutex->owner->base.prio);
 
@@ -151,9 +162,7 @@ int k_mutex_lock(struct k_mutex *mutex, s32_t timeout)
 		adjust_owner_prio(mutex, new_prio);
 	}
 
-	_pend_current_thread(&mutex->wait_q, timeout);
-
-	int got_mutex = _Swap(key);
+	s32_t got_mutex = _pend_current_thread(key, &mutex->wait_q, timeout);
 
 	K_DEBUG("on mutex %p got_mutex value: %d\n", mutex, got_mutex);
 
@@ -162,6 +171,7 @@ int k_mutex_lock(struct k_mutex *mutex, s32_t timeout)
 
 	if (got_mutex == 0) {
 		k_sched_unlock();
+		sys_trace_end_call(SYS_TRACE_ID_MUTEX_LOCK);
 		return 0;
 	}
 
@@ -169,12 +179,12 @@ int k_mutex_lock(struct k_mutex *mutex, s32_t timeout)
 
 	K_DEBUG("%p timeout on mutex %p\n", _current, mutex);
 
-	struct k_thread *waiter =
-		(struct k_thread *)sys_dlist_peek_head(&mutex->wait_q);
+	struct k_thread *waiter = _waitq_head(&mutex->wait_q);
 
 	new_prio = mutex->owner_orig_prio;
-	new_prio = waiter ? new_prio_for_inheritance(waiter->base.prio,
-						     new_prio) : new_prio;
+	new_prio = (waiter != NULL) ?
+		new_prio_for_inheritance(waiter->base.prio, new_prio) :
+		new_prio;
 
 	K_DEBUG("adjusting prio down on mutex %p\n", mutex);
 
@@ -184,16 +194,27 @@ int k_mutex_lock(struct k_mutex *mutex, s32_t timeout)
 
 	k_sched_unlock();
 
+	sys_trace_end_call(SYS_TRACE_ID_MUTEX_LOCK);
 	return -EAGAIN;
 }
 
-void k_mutex_unlock(struct k_mutex *mutex)
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(k_mutex_lock, mutex, timeout)
 {
-	int key;
+	Z_OOPS(Z_SYSCALL_OBJ(mutex, K_OBJ_MUTEX));
+	return _impl_k_mutex_lock((struct k_mutex *)mutex, (s32_t)timeout);
+}
+#endif
 
-	__ASSERT(mutex->lock_count > 0, "");
+void _impl_k_mutex_unlock(struct k_mutex *mutex)
+{
+	u32_t key;
+	struct k_thread *new_owner;
+
+	__ASSERT(mutex->lock_count > 0U, "");
 	__ASSERT(mutex->owner == _current, "");
 
+	sys_trace_void(SYS_TRACE_ID_MUTEX_UNLOCK);
 	_sched_lock();
 
 	RECORD_STATE_CHANGE();
@@ -202,22 +223,22 @@ void k_mutex_unlock(struct k_mutex *mutex)
 
 	K_DEBUG("mutex %p lock_count: %d\n", mutex, mutex->lock_count);
 
-	if (mutex->lock_count != 0) {
-		k_sched_unlock();
-		return;
+	if (mutex->lock_count != 0U) {
+		goto k_mutex_unlock_return;
 	}
 
 	key = irq_lock();
 
 	adjust_owner_prio(mutex, mutex->owner_orig_prio);
 
-	struct k_thread *new_owner = _unpend_first_thread(&mutex->wait_q);
+	new_owner = _unpend_first_thread(&mutex->wait_q);
+
+	mutex->owner = new_owner;
 
 	K_DEBUG("new owner of mutex %p: %p (prio: %d)\n",
 		mutex, new_owner, new_owner ? new_owner->base.prio : -1000);
 
-	if (new_owner) {
-		_abort_thread_timeout(new_owner);
+	if (new_owner != NULL) {
 		_ready_thread(new_owner);
 
 		irq_unlock(key);
@@ -229,13 +250,23 @@ void k_mutex_unlock(struct k_mutex *mutex)
 		 * waiter since the wait queue is priority-based: no need to
 		 * ajust its priority
 		 */
-		mutex->owner = new_owner;
 		mutex->lock_count++;
 		mutex->owner_orig_prio = new_owner->base.prio;
-	} else {
-		irq_unlock(key);
-		mutex->owner = NULL;
 	}
 
+	irq_unlock(key);
+
+k_mutex_unlock_return:
 	k_sched_unlock();
 }
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(k_mutex_unlock, mutex)
+{
+	Z_OOPS(Z_SYSCALL_OBJ(mutex, K_OBJ_MUTEX));
+	Z_OOPS(Z_SYSCALL_VERIFY(((struct k_mutex *)mutex)->lock_count > 0));
+	Z_OOPS(Z_SYSCALL_VERIFY(((struct k_mutex *)mutex)->owner == _current));
+	_impl_k_mutex_unlock((struct k_mutex *)mutex);
+	return 0;
+}
+#endif

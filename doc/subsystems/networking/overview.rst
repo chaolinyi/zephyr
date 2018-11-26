@@ -47,6 +47,14 @@ can be disabled if not needed.
   and client roles can be used the the application. The amount of TCP sockets
   that are available to applications can be configured at build time.
 
+* **BSD Sockets API** Experimental support for a subset of a BSD Sockets
+  compatible API is implemented. Both blocking and non-blocking DGRAM (UDP)
+  and STREAM (TCP) sockets are supported.
+
+* **Secure Sockets API** Experimental support for TLS/DTLS secure protocols and
+  configuration options for sockets API. Secure functions for the implementation
+  are provided by mbedTLS library.
+
 * **HTTP** Hypertext Transfer Protocol (RFC 2116) is supported. A simple
   library is provided that applications can use. Sample applications are
   implemented for :ref:`http-client-sample` and :ref:`http-server-sample`.
@@ -59,11 +67,20 @@ can be disabled if not needed.
   A sample :ref:`mqtt-publisher-sample` client application for MQTT v3.1.1 is
   implemented.
 
-* **CoAP** Constrained Application Protocol (RFC 7252) is supported. Both
-  Both :ref:`zoap-client-sample` and :ref:`zoap-server-sample` sample
-  applications are implemented. A :ref:`coap-client-sample` and
-  :ref:`coap-server-sample` using DTLS (Datagram Transport Layer Security)
-  (RFC 6347) are also implemented.
+* **CoAP** Constrained Application Protocol (RFC 7252) is supported.
+  Both :ref:`coap-client-sample` and :ref:`coap-server-sample` sample
+  applications are implemented.
+
+* **CoAP over Sockets** Constrained Application Protocol (RFC 7252) is supported
+  over socket based applications or higher layer protocols.
+  Both :ref:`coap-client-sock-sample` and :ref:`coap-server-sock-sample`
+  sample applications are implemented.
+
+* **LWM2M** OMA Lightweight Machine-to-Machine Protocol (V1.0 Feb 2017) is
+  supported via the "Register Device" API (Register, De-Register and Update)
+  and has template implementations for Security, Server, Device Management and
+  Firmware objects.   DTLS and Bootstrap support are currently not supported.
+  :ref:`lwm2m-client-sample` implements the library as an example.
 
 * **RPL** IPv6 Routing Protocol for Low-Power and Lossy Networks (RFC 6550)
   is supported. RPL is an IPv6 based mesh routing protocol.
@@ -89,24 +106,48 @@ can be disabled if not needed.
   is even possible to have zero-copy data path from application to device
   driver.
 
-Additionally these network technologies are supported in Zephyr OS v1.7
-or later:
+* **Virtual LAN support.** Virtual LANs (VLANs) allow partitioning of physical
+  ethernet networks into logical networks. See :ref:`vlan-support` for more
+  details.
+
+* **Network traffic classification.** The sent and received network packets can
+  be prioritized depending on application needs.
+  See :ref:`traffic-class-support` for more details.
+
+* **Websocket** Websocket (RFC 6455) server side functionality is supported.
+  The HTTP server API will enable websocket support if
+  :option:`CONFIG_WEBSOCKET` is enabled. Client side websocket functionality is
+  currently not supported by the websocket API.
+  See :ref:`websocket-server-sample` for information how to use the API.
+
+* **Time Sensitive Networking.** The gPTP (generalized Precision Time Protocol)
+  is supported. See :ref:`gptp-support` for more details.
+
+Additionally these network technologies (link layers) are supported in
+Zephyr OS v1.7 and later:
 
 * IEEE 802.15.4
 * Bluetooth
 * Ethernet
-
-  * SLIP (IP over serial line) is used for testing with QEMU. It provides
-    ethernet interface to host system (like Linux) and test applications
-    can be run in Linux host and send network data to Zephyr OS device.
+* SLIP (IP over serial line). Used for testing with QEMU. It provides
+  ethernet interface to host system (like Linux) and test applications
+  can be run in Linux host and send network data to Zephyr OS device.
 
 Source Tree Layout
 ******************
 
-The IP stack source code tree is organized as follows:
+The networking stack source code tree is organized as follows:
 
 ``subsys/net/ip/``
   This is where the IP stack code is located.
+
+``subsys/net/l2/``
+  This is where the IP stack layer 2 code is located. This includes generic
+  support for Bluetooth IPSP adaptation, Ethernet, IEEE 802.15.4 and WiFI.
+
+``subsys/net/lib/``
+  Application-level protocols (DNS, MQTT, etc.) and additional stack
+  components (BSD Sockets, etc.).
 
 ``include/net/``
   Public API header files. These are the header files applications need

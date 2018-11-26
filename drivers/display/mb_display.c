@@ -13,7 +13,6 @@
 
 #include <zephyr.h>
 #include <init.h>
-#include <board.h>
 #include <gpio.h>
 #include <device.h>
 #include <string.h>
@@ -24,6 +23,55 @@
 #include "mb_font.h"
 
 #define MODE_MASK    BIT_MASK(16)
+
+/* Onboard LED Row 1 */
+#define LED_ROW1_GPIO_PIN   13
+#define LED_ROW1_GPIO_PORT  DT_GPIO_P0_DEV_NAME
+
+/* Onboard LED Row 2 */
+#define LED_ROW2_GPIO_PIN   14
+#define LED_ROW2_GPIO_PORT  DT_GPIO_P0_DEV_NAME
+
+/* Onboard LED Row 3 */
+#define LED_ROW3_GPIO_PIN   15
+#define LED_ROW3_GPIO_PORT  DT_GPIO_P0_DEV_NAME
+
+/* Onboard LED Column 1 */
+#define LED_COL1_GPIO_PIN   4
+#define LED_COL1_GPIO_PORT  DT_GPIO_P0_DEV_NAME
+
+/* Onboard LED Column 2 */
+#define LED_COL2_GPIO_PIN   5
+#define LED_COL2_GPIO_PORT  DT_GPIO_P0_DEV_NAME
+
+/* Onboard LED Column 3 */
+#define LED_COL3_GPIO_PIN   6
+#define LED_COL3_GPIO_PORT  DT_GPIO_P0_DEV_NAME
+
+/* Onboard LED Column 4 */
+#define LED_COL4_GPIO_PIN   7
+#define LED_COL4_GPIO_PORT  DT_GPIO_P0_DEV_NAME
+
+/* Onboard LED Column 5 */
+#define LED_COL5_GPIO_PIN   8
+#define LED_COL5_GPIO_PORT  DT_GPIO_P0_DEV_NAME
+
+/* Onboard LED Column 6 */
+#define LED_COL6_GPIO_PIN   9
+#define LED_COL6_GPIO_PORT  DT_GPIO_P0_DEV_NAME
+
+/* Onboard LED Column 7 */
+#define LED_COL7_GPIO_PIN   10
+#define LED_COL7_GPIO_PORT  DT_GPIO_P0_DEV_NAME
+
+/* Onboard LED Column 8 */
+#define LED_COL8_GPIO_PIN   11
+#define LED_COL8_GPIO_PORT  DT_GPIO_P0_DEV_NAME
+
+/* Onboard LED Column 9 */
+#define LED_COL9_GPIO_PIN   12
+#define LED_COL9_GPIO_PORT  DT_GPIO_P0_DEV_NAME
+
 
 #define DISPLAY_ROWS 3
 #define DISPLAY_COLS 9
@@ -38,21 +86,21 @@ struct mb_display {
 
 	struct k_timer  timer;       /* Rendering timer */
 
-	u8_t         img_count;   /* Image count */
+	u8_t            img_count;   /* Image count */
 
-	u8_t         cur_img;     /* Current image or character to show */
+	u8_t            cur_img;     /* Current image or character to show */
 
-	u8_t         scroll:3,    /* Scroll shift */
+	u8_t            scroll:3,    /* Scroll shift */
 			first:1,     /* First frame of a scroll sequence */
 			loop:1,      /* Loop to beginning */
 			text:1,      /* We're showing a string (not image) */
 			img_sep:1;   /* One column image separation */
 
 	/* The following variables track the currently shown image */
-	u8_t         cur;         /* Currently rendered row */
-	u32_t        row[3];      /* Content (columns) for each row */
-	s64_t         expiry;      /* When to stop showing current image */
-	s32_t         duration;    /* Duration for each shown image */
+	u8_t            cur;         /* Currently rendered row */
+	u32_t           row[3];      /* Content (columns) for each row */
+	s64_t           expiry;      /* When to stop showing current image */
+	s32_t           duration;    /* Duration for each shown image */
 
 	union {
 		const struct mb_image *img; /* Array of images to show */
@@ -65,7 +113,7 @@ struct mb_display {
 
 struct x_y {
 	u8_t x:4,
-		y:4;
+	     y:4;
 };
 
 /* Where the X,Y coordinates of each row/col are found.
@@ -79,7 +127,7 @@ static const struct x_y map[DISPLAY_ROWS][DISPLAY_COLS] = {
 
 /* Mask of all the column bits */
 static const u32_t col_mask = (((~0UL) << LED_COL1_GPIO_PIN) &
-				  ((~0UL) >> (31 - LED_COL9_GPIO_PIN)));
+			       ((~0UL) >> (31 - LED_COL9_GPIO_PIN)));
 
 static inline const struct mb_image *get_font(char ch)
 {
@@ -282,7 +330,7 @@ static void clear_display(struct k_timer *timer)
 }
 
 static struct mb_display display = {
-	.timer = K_TIMER_INITIALIZER(display.timer, show_row, clear_display),
+	.timer = _K_TIMER_INITIALIZER(display.timer, show_row, clear_display),
 };
 
 static void start_scroll(struct mb_display *disp, s32_t duration)
@@ -386,7 +434,7 @@ static int mb_display_init(struct device *dev)
 {
 	ARG_UNUSED(dev);
 
-	display.dev = device_get_binding(CONFIG_GPIO_NRF5_P0_DEV_NAME);
+	display.dev = device_get_binding(DT_GPIO_P0_DEV_NAME);
 
 	__ASSERT(dev, "No GPIO device found");
 

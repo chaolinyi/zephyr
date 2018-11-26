@@ -9,8 +9,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef __SENSOR_H__
-#define __SENSOR_H__
+#ifndef ZEPHYR_INCLUDE_SENSOR_H_
+#define ZEPHYR_INCLUDE_SENSOR_H_
 
 /**
  * @brief Sensor Interface
@@ -31,12 +31,19 @@ extern "C" {
  * @brief Representation of a sensor readout value.
  *
  * The value is represented as having an integer and a fractional part,
- * and can be obtained using the formula val1 + val2 * 10^(-6).
+ * and can be obtained using the formula val1 + val2 * 10^(-6). Negative
+ * values also adhere to the above formula, but may need special attention.
+ * Here are some examples of the value representation:
+ *
+ *      0.5: val1 =  0, val2 =  500000
+ *     -0.5: val1 =  0, val2 = -500000
+ *     -1.0: val1 = -1, val2 =  0
+ *     -1.5: val1 = -1, val2 = -500000
  */
 struct sensor_value {
 	/** Integer part of the value. */
 	s32_t val1;
-	/** Fractional part of the value. */
+	/** Fractional part of the value (in one-millionth parts). */
 	s32_t val2;
 };
 
@@ -52,13 +59,6 @@ enum sensor_channel {
 	SENSOR_CHAN_ACCEL_Z,
 	/** Acceleration on the X, Y and Z axes. */
 	SENSOR_CHAN_ACCEL_XYZ,
-	/**
-	 * This enum value will be deprecated.
-	 * Please use SENSOR_CHAN_ACCEL_XYZ instead.
-	 *
-	 * Acceleration on any axis.
-	 */
-	SENSOR_CHAN_ACCEL_ANY = SENSOR_CHAN_ACCEL_XYZ,
 	/** Angular velocity around the X axis, in radians/s. */
 	SENSOR_CHAN_GYRO_X,
 	/** Angular velocity around the Y axis, in radians/s. */
@@ -67,13 +67,6 @@ enum sensor_channel {
 	SENSOR_CHAN_GYRO_Z,
 	/** Angular velocity around the X, Y and Z axes. */
 	SENSOR_CHAN_GYRO_XYZ,
-	/**
-	 * This enum value will be deprecated.
-	 * Please use SENSOR_CHAN_GYRO_XYZ instead.
-	 *
-	 * Angular velocity on any axis.
-	 */
-	SENSOR_CHAN_GYRO_ANY = SENSOR_CHAN_GYRO_XYZ,
 	/** Magnetic field on the X axis, in Gauss. */
 	SENSOR_CHAN_MAGN_X,
 	/** Magnetic field on the Y axis, in Gauss. */
@@ -82,15 +75,10 @@ enum sensor_channel {
 	SENSOR_CHAN_MAGN_Z,
 	/** Magnetic field on the X, Y and Z axes. */
 	SENSOR_CHAN_MAGN_XYZ,
-	/**
-	 * This enum value will be deprecated.
-	 * Please use SENSOR_CHAN_MAGN_XYZ instead.
-	 *
-	 * Magnetic field on any axis.
-	 */
-	SENSOR_CHAN_MAGN_ANY = SENSOR_CHAN_MAGN_XYZ,
-	/** Temperature in degrees Celsius. */
-	SENSOR_CHAN_TEMP,
+	/** Device die temperature in degrees Celsius. */
+	SENSOR_CHAN_DIE_TEMP,
+	/** Ambient temperature in degrees Celsius. */
+	SENSOR_CHAN_AMBIENT_TEMP,
 	/** Pressure in kilopascal. */
 	SENSOR_CHAN_PRESS,
 	/**
@@ -98,7 +86,7 @@ enum sensor_channel {
 	 * object is close.
 	 */
 	SENSOR_CHAN_PROX,
-	/** Humidity, in milli percent. */
+	/** Humidity, in percent. */
 	SENSOR_CHAN_HUMIDITY,
 	/** Illuminance in visible spectrum, in lux. */
 	SENSOR_CHAN_LIGHT,
@@ -108,8 +96,33 @@ enum sensor_channel {
 	SENSOR_CHAN_RED,
 	/** Illuminance in green spectrum, in lux. */
 	SENSOR_CHAN_GREEN,
+	/** Illuminance in blue spectrum, in lux. */
+	SENSOR_CHAN_BLUE,
 	/** Altitude, in meters */
 	SENSOR_CHAN_ALTITUDE,
+
+	/** 1.0 micro-meters Particulate Matter, in ug/m^3 */
+	SENSOR_CHAN_PM_1_0,
+	/** 2.5 micro-meters Particulate Matter, in ug/m^3 */
+	SENSOR_CHAN_PM_2_5,
+	/** 10 micro-meters Particulate Matter, in ug/m^3 */
+	SENSOR_CHAN_PM_10,
+	/** Distance. From sensor to target, in meters */
+	SENSOR_CHAN_DISTANCE,
+
+	/** CO2 level, in parts per million (ppm) **/
+	SENSOR_CHAN_CO2,
+	/** VOC level, in parts per billion (ppb) **/
+	SENSOR_CHAN_VOC,
+
+	/** Voltage, in volts **/
+	SENSOR_CHAN_VOLTAGE,
+	/** Current, in amps **/
+	SENSOR_CHAN_CURRENT,
+
+	/** Angular rotation, in degrees */
+	SENSOR_CHAN_ROTATION,
+
 	/** All channels. */
 	SENSOR_CHAN_ALL,
 };
@@ -263,10 +276,15 @@ struct sensor_driver_api {
  *
  * @return 0 if successful, negative errno code if failure.
  */
-static inline int sensor_attr_set(struct device *dev,
-				  enum sensor_channel chan,
-				  enum sensor_attribute attr,
-				  const struct sensor_value *val)
+__syscall int sensor_attr_set(struct device *dev,
+			      enum sensor_channel chan,
+			      enum sensor_attribute attr,
+			      const struct sensor_value *val);
+
+static inline int _impl_sensor_attr_set(struct device *dev,
+					enum sensor_channel chan,
+					enum sensor_attribute attr,
+					const struct sensor_value *val)
 {
 	const struct sensor_driver_api *api = dev->driver_api;
 
@@ -280,10 +298,12 @@ static inline int sensor_attr_set(struct device *dev,
 /**
  * @brief Activate a sensor's trigger and set the trigger handler
  *
- * The handler will be called from a fiber, so I2C or SPI operations are
- * safe.  However, the fiber's stack is limited and defined by the
+ * The handler will be called from a thread, so I2C or SPI operations are
+ * safe.  However, the thread's stack is limited and defined by the
  * driver.  It is currently up to the caller to ensure that the handler
  * does not overflow the stack.
+ *
+ * This API is not permitted for user threads.
  *
  * @param dev Pointer to the sensor device
  * @param trig The trigger to activate
@@ -321,7 +341,9 @@ static inline int sensor_trigger_set(struct device *dev,
  *
  * @return 0 if successful, negative errno code if failure.
  */
-static inline int sensor_sample_fetch(struct device *dev)
+__syscall int sensor_sample_fetch(struct device *dev);
+
+static inline int _impl_sensor_sample_fetch(struct device *dev)
 {
 	const struct sensor_driver_api *api = dev->driver_api;
 
@@ -347,8 +369,11 @@ static inline int sensor_sample_fetch(struct device *dev)
  *
  * @return 0 if successful, negative errno code if failure.
  */
-static inline int sensor_sample_fetch_chan(struct device *dev,
-					   enum sensor_channel type)
+__syscall int sensor_sample_fetch_chan(struct device *dev,
+				       enum sensor_channel type);
+
+static inline int _impl_sensor_sample_fetch_chan(struct device *dev,
+						 enum sensor_channel type)
 {
 	const struct sensor_driver_api *api = dev->driver_api;
 
@@ -376,9 +401,13 @@ static inline int sensor_sample_fetch_chan(struct device *dev,
  *
  * @return 0 if successful, negative errno code if failure.
  */
-static inline int sensor_channel_get(struct device *dev,
-				     enum sensor_channel chan,
-				     struct sensor_value *val)
+__syscall int sensor_channel_get(struct device *dev,
+				 enum sensor_channel chan,
+				 struct sensor_value *val);
+
+static inline int _impl_sensor_channel_get(struct device *dev,
+					   enum sensor_channel chan,
+					   struct sensor_value *val)
 {
 	const struct sensor_driver_api *api = dev->driver_api;
 
@@ -467,6 +496,7 @@ static inline double sensor_value_to_double(struct sensor_value *val)
 	return (double)val->val1 + (double)val->val2 / 1000000;
 }
 
+#include <syscalls/sensor.h>
 
 #ifdef __cplusplus
 }
@@ -476,4 +506,4 @@ static inline double sensor_value_to_double(struct sensor_value *val)
  * @}
  */
 
-#endif /* __SENSOR_H__ */
+#endif /* ZEPHYR_INCLUDE_SENSOR_H_ */

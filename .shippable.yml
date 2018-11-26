@@ -4,96 +4,104 @@ compiler: gcc
 
 env:
     global:
-        - SDK=0.9.1
-        - SANITYCHECK_OPTIONS=" --inline-logs -R"
+        - SDK=0.9.5
+        - SANITYCHECK_OPTIONS=" --inline-logs --enable-coverage -N"
         - SANITYCHECK_OPTIONS_RETRY="${SANITYCHECK_OPTIONS} --only-failed --outdir=out-2nd-pass"
-        - ZEPHYR_SDK_INSTALL_DIR=/opt/sdk/zephyr-sdk-0.9.1
-        - ZEPHYR_GCC_VARIANT=zephyr
-        - USE_CCACHE=1
-        - MATRIX_BUILDS="2"
+        - ZEPHYR_SDK_INSTALL_DIR=/opt/sdk/zephyr-sdk-0.9.5
+        - ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+        - MATRIX_BUILDS="5"
+        - MATRIX_BUILDS_EXTRA="5"
+        - BSIM_OUT_PATH=/opt/bsim/
+        - BSIM_COMPONENTS_PATH=${BSIM_OUT_PATH}/components/
+        - BSIM_BT_TEST_RESULTS_FILE="./bsim_bt_out/bsim_results.xml"
     matrix:
         - MATRIX_BUILD="1"
         - MATRIX_BUILD="2"
+        - MATRIX_BUILD="3"
+        - MATRIX_BUILD="4"
+        - MATRIX_BUILD="5"
 
 build:
-    cache: true
+    cache: false
     cache_dir_list:
         - ${SHIPPABLE_BUILD_DIR}/ccache
     pre_ci_boot:
         image_name: zephyrprojectrtos/ci
-        image_tag: master.16
+        image_tag: v0.5-rc3
         pull: true
         options: "-e HOME=/home/buildslave --privileged=true --tty --net=bridge --user buildslave"
 
     ci:
       - export CCACHE_DIR=${SHIPPABLE_BUILD_DIR}/ccache/.ccache
-      - source zephyr-env.sh
-      - ccache -c -s --max-size=2000M
-      - make host-tools
-      - export PREBUILT_HOST_TOOLS=${ZEPHYR_BASE}/bin
       - >
-          if [ "$IS_PULL_REQUEST" = "true" ]; then
-            S3_PATH="s3://zephyr-logs/pull-requests/${REPO_FULL_NAME}/${PULL_REQUEST}"
-          else
-            if [ "$JOB_TRIGGERED_BY_NAME" = "undefined" ]; then
-              LOG_TYPE="manual";
-            else
-              LOG_TYPE=${JOB_TRIGGERED_BY_NAME};
-            fi;
-
-            S3_PATH="s3://zephyr-logs/${LOG_TYPE}/${REPO_FULL_NAME}/${BUILD_NUMBER}";
-          fi;
-      - >
-          if [ "$MATRIX_BUILD" = "1" -a "$IS_PULL_REQUEST" = "true" ]; then
-            export COMMIT_RANGE=origin/${PULL_REQUEST_BASE_BRANCH}..${COMMIT}
-            echo "Building a Pull Request";
-            echo "- Building Documentation";
-            echo "Commit range:" ${COMMIT_RANGE}
-            make htmldocs > doc.log 2>&1;
-            python2 ./scripts/filter-known-issues.py --config-dir .known-issues/doc/ doc.log > doc.warnings;
-            if [ "$?" != 0 ]; then
-              echo " ==> Error running filter script"
-              exit 1
-            fi;
-            if [ -s doc.warnings ]; then
-              echo " => New documentation warnings/errors";
-            fi;
-            echo "- Verify commit message and coding style";
-            ./scripts/ci/check-compliance.py --commits ${COMMIT_RANGE} || true;
-          fi;
-      - >
-          if [ "$JOB_TRIGGERED_BY_NAME" = "daily-verify" ]; then
-            echo "- Building with --all --enable-slow";
-            COVERAGE="--all --enable-slow";
-          fi;
-      - >
-          ./scripts/sanitycheck ${PLATFORMS} --subset ${MATRIX_BUILD}/${MATRIX_BUILDS} ${COVERAGE} ${SANITYCHECK_OPTIONS} || ./scripts/sanitycheck ${PLATFORMS} --subset ${MATRIX_BUILD}/${MATRIX_BUILDS}  ${COVERAGE} ${SANITYCHECK_OPTIONS_RETRY};
+        if [ "$IS_PULL_REQUEST" = "true" ]; then
+          ./scripts/ci/run_ci.sh -b master -r origin -m ${MATRIX_BUILD} -M ${MATRIX_BUILDS} -B ${BSIM_BT_TEST_RESULTS_FILE} -p;
+        else
+          ./scripts/ci/run_ci.sh -b master -r origin -m ${MATRIX_BUILD} -M ${MATRIX_BUILDS} -B ${BSIM_BT_TEST_RESULTS_FILE};
+        fi;
       - ccache -s
-    on_success:
-      - rm -rf sanity-out out-2nd-pass
-      - mkdir -p shippable/testresults
-      - >
-          if [ -e compliance.xml ]; then
-            cp compliance.xml shippable/testresults/;
-            aws s3 cp compliance.xml ${S3_PATH}/;
-          fi;
-      - >
-          if [ -e ./scripts/sanity_chk/last_sanity.xml ]; then
-            cp ./scripts/sanity_chk/last_sanity.xml shippable/testresults/;
-            aws s3 cp ./scripts/sanity_chk/last_sanity.xml ${S3_PATH}/sanitycheck.xml;
-          fi;
     on_failure:
-      - rm -rf sanity-out out-2nd-pass
+      - >
+         if [ -f "$HOME/.cache/zephyr/ToolchainCapabilityDatabase.cmake" ]; then
+           echo "Dumping the capability database in case we are affected by #9992"
+           cat $HOME/.cache/zephyr/ToolchainCapabilityDatabase.cmake
+         fi;
+      - rm -rf ccache $HOME/.cache/zephyr
       - mkdir -p shippable/testresults
+      - mkdir -p shippable/codecoverage
+      - source zephyr-env.sh
+      - >
+         if [ "$MATRIX_BUILD" = "1" ]; then
+            gcovr -r ${ZEPHYR_BASE} -x > shippable/codecoverage/coverage.xml;
+            lcov --capture --directory sanity-out/native_posix/ --directory sanity-out/nrf52_bsim/ --directory sanity-out/unit_testing/ --directory bsim_bt_out/ --output-file lcov.pre.info -q --rc lcov_branch_coverage=1;
+            lcov -q --remove lcov.pre.info mylib.c --remove lcov.pre.info tests/\* --remove lcov.pre.info samples/\* --remove lcov.pre.info ext/\* --remove lcov.pre.info *generated* -o lcov.info --rc lcov_branch_coverage=1;
+            rm lcov.pre.info;
+            rm -rf sanity-out out-2nd-pass;
+            bash <(curl -s https://codecov.io/bash) -f "lcov.info" -X coveragepy -X fixes;
+            rm -f lcov.info;
+         else
+            rm -rf sanity-out out-2nd-pass;
+         fi;
       - >
           if [ -e compliance.xml ]; then
             cp compliance.xml shippable/testresults/;
-            aws s3 cp compliance.xml ${S3_PATH}/;
           fi;
       - >
           if [ -e ./scripts/sanity_chk/last_sanity.xml ]; then
             cp ./scripts/sanity_chk/last_sanity.xml shippable/testresults/;
-            aws s3 cp ./scripts/sanity_chk/last_sanity.xml ${S3_PATH}/sanitycheck.xml;
+          fi;
+      - >
+          if [ -e ${BSIM_BT_TEST_RESULTS_FILE} ]; then
+            cp ${BSIM_BT_TEST_RESULTS_FILE} shippable/testresults/;
+          fi;
+    on_success:
+      - rm -rf ccache $HOME/.cache/zephyr
+      - mkdir -p shippable/testresults
+      - mkdir -p shippable/codecoverage
+      - source zephyr-env.sh
+      - >
+         if [ "$MATRIX_BUILD" = "1" ]; then
+            gcovr -r ${ZEPHYR_BASE} -x > shippable/codecoverage/coverage.xml;
+            lcov --capture --directory sanity-out/native_posix/ --directory sanity-out/nrf52_bsim/ --directory sanity-out/unit_testing/ --directory bsim_bt_out/ --output-file lcov.pre.info -q --rc lcov_branch_coverage=1;
+            lcov -q --remove lcov.pre.info mylib.c --remove lcov.pre.info tests/\* --remove lcov.pre.info samples/\* --remove lcov.pre.info ext/\* --remove lcov.pre.info *generated* -o lcov.info --rc lcov_branch_coverage=1;
+            rm lcov.pre.info;
+            rm -rf sanity-out out-2nd-pass;
+            bash <(curl -s https://codecov.io/bash) -f "lcov.info" -X coveragepy -X fixes;
+            rm -f lcov.info;
+         else
+            rm -rf sanity-out out-2nd-pass;
+         fi;
+      - >
+          if [ -e compliance.xml ]; then
+            cp compliance.xml shippable/testresults/;
+          fi;
+      - >
+          if [ -e ./scripts/sanity_chk/last_sanity.xml ]; then
+            cp ./scripts/sanity_chk/last_sanity.xml shippable/testresults/;
+          fi;
+      - >
+          if [ -e ${BSIM_BT_TEST_RESULTS_FILE} ]; then
+            cp ${BSIM_BT_TEST_RESULTS_FILE} shippable/testresults/;
           fi;
 
 integrations:

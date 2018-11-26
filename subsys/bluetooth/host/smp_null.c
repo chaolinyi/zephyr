@@ -18,7 +18,8 @@
 #include <bluetooth/conn.h>
 #include <bluetooth/buf.h>
 
-#define BT_DBG_ENABLED IS_ENABLED(CONFIG_BLUETOOTH_DEBUG_HCI_CORE)
+#define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_CORE)
+#define LOG_MODULE_NAME bt_smp
 #include "common/log.h"
 
 #include "hci_core.h"
@@ -26,7 +27,7 @@
 #include "l2cap_internal.h"
 #include "smp.h"
 
-static struct bt_l2cap_le_chan bt_smp_pool[CONFIG_BLUETOOTH_MAX_CONN];
+static struct bt_l2cap_le_chan bt_smp_pool[CONFIG_BT_MAX_CONN];
 
 int bt_smp_sign_verify(struct bt_conn *conn, struct net_buf *buf)
 {
@@ -38,7 +39,7 @@ int bt_smp_sign(struct bt_conn *conn, struct net_buf *buf)
 	return -ENOTSUP;
 }
 
-static void bt_smp_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
+static int bt_smp_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 {
 	struct bt_conn *conn = chan->conn;
 	struct bt_smp_pairing_fail *rsp;
@@ -60,6 +61,8 @@ static void bt_smp_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 	rsp->reason = BT_SMP_ERR_PAIRING_NOTSUPP;
 
 	bt_l2cap_send(conn, BT_L2CAP_CID_SMP, buf);
+
+	return 0;
 }
 
 static int bt_smp_accept(struct bt_conn *conn, struct bt_l2cap_chan **chan)

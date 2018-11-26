@@ -11,10 +11,12 @@
  * ARM-specific kernel error handling interface. Included by arm/arch.h.
  */
 
-#ifndef _ARCH_ARM_CORTEXM_ERROR_H_
-#define _ARCH_ARM_CORTEXM_ERROR_H_
+#ifndef ZEPHYR_INCLUDE_ARCH_ARM_CORTEX_M_ERROR_H_
+#define ZEPHYR_INCLUDE_ARCH_ARM_CORTEX_M_ERROR_H_
 
+#include <arch/arm/syscall.h>
 #include <arch/arm/cortex_m/exc.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,16 +28,13 @@ extern void _SysFatalErrorHandler(unsigned int reason, const NANO_ESF *esf);
 #endif
 
 #define _NANO_ERR_HW_EXCEPTION (0)      /* MPU/Bus/Usage fault */
-#define _NANO_ERR_INVALID_TASK_EXIT (1) /* Invalid task exit */
 #define _NANO_ERR_STACK_CHK_FAIL (2)    /* Stack corruption detected */
 #define _NANO_ERR_ALLOCATION_FAIL (3)   /* Kernel Allocation Failure */
 #define _NANO_ERR_KERNEL_OOPS (4)       /* Kernel oops (fatal to thread) */
 #define _NANO_ERR_KERNEL_PANIC (5)	/* Kernel panic (fatal to system) */
+#define _NANO_ERR_RECOVERABLE (6)       /* Recoverable error */
 
-#define _SVC_CALL_IRQ_OFFLOAD		1
-#define _SVC_CALL_RUNTIME_EXCEPT	2
-
-#if defined(CONFIG_ARMV6_M)
+#if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
 /* ARMv6 will hard-fault if SVC is called with interrupts locked. Just
  * force them unlocked, the thread is in an undefined state anyway
  *
@@ -53,8 +52,8 @@ extern void _SysFatalErrorHandler(unsigned int reason, const NANO_ESF *esf);
 		: [reason] "i" (reason_p), [id] "i" (_SVC_CALL_RUNTIME_EXCEPT) \
 		: "memory"); \
 	CODE_UNREACHABLE; \
-} while (0)
-#elif defined(CONFIG_ARMV7_M)
+} while (false)
+#elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
 #define _ARCH_EXCEPT(reason_p) do { \
 	__asm__ volatile ( \
 		"eors.n r0, r0\n\t" \
@@ -65,13 +64,13 @@ extern void _SysFatalErrorHandler(unsigned int reason, const NANO_ESF *esf);
 		: [reason] "i" (reason_p), [id] "i" (_SVC_CALL_RUNTIME_EXCEPT) \
 		: "memory"); \
 	CODE_UNREACHABLE; \
-} while (0)
+} while (false)
 #else
 #error Unknown ARM architecture
-#endif /* CONFIG_ARMV6_M */
+#endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* _ARCH_ARM_CORTEXM_ERROR_H_ */
+#endif /* ZEPHYR_INCLUDE_ARCH_ARM_CORTEX_M_ERROR_H_ */

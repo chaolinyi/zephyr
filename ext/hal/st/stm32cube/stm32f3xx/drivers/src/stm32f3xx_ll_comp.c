@@ -2,8 +2,6 @@
   ******************************************************************************
   * @file    stm32f3xx_ll_comp.c
   * @author  MCD Application Team
-  * @version V1.4.0
-  * @date    16-December-2016
   * @brief   COMP LL module driver
   ******************************************************************************
   * @attention
@@ -625,7 +623,7 @@ ErrorStatus LL_COMP_DeInit(COMP_TypeDef *COMPx)
 
   /* Note: Hardware constraint (refer to description of this function):       */
   /*       COMP instance must not be locked.                                  */
-  if(LL_COMP_IsLocked(COMPx) == 0U)
+  if (LL_COMP_IsLocked(COMPx) == 0U)
   {
     LL_COMP_WriteReg(COMPx, CSR, 0x00000000U);
   }
@@ -668,7 +666,7 @@ ErrorStatus LL_COMP_Init(COMP_TypeDef *COMPx, LL_COMP_InitTypeDef *COMP_InitStru
 
   /* Note: Hardware constraint (refer to description of this function)        */
   /*       COMP instance must not be locked.                                  */
-  if(LL_COMP_IsLocked(COMPx) == 0U)
+  if (LL_COMP_IsLocked(COMPx) == 0U)
   {
     /* Configuration of comparator instance :                                 */
     /*  - PowerMode                                                           */
@@ -722,7 +720,7 @@ ErrorStatus LL_COMP_Init(COMP_TypeDef *COMPx, LL_COMP_InitTypeDef *COMP_InitStru
 
 /**
   * @brief Set each @ref LL_COMP_InitTypeDef field to default value.
-  * @param COMP_InitStruct: pointer to a @ref LL_COMP_InitTypeDef structure
+  * @param COMP_InitStruct pointer to a @ref LL_COMP_InitTypeDef structure
   *                         whose fields will be set to default values.
   * @retval None
   */
@@ -878,12 +876,12 @@ ErrorStatus LL_COMP_DeInit(COMP_TypeDef *COMPx)
 
   /* Note: Hardware constraint (refer to description of this function):       */
   /*       COMP instance must not be locked.                                  */
-  if(LL_COMP_IsLocked(COMPx) == 0U)
+  if (LL_COMP_IsLocked(COMPx) == 0U)
   {
     /* Note: Connection switch is applicable only to COMP instance COMP1,     */
     /*       therefore is COMP2 is selected the equivalent bit is             */
     /*       kept unmodified.                                                 */
-    if(COMPx == COMP1)
+    if (COMPx == COMP1)
     {
       CLEAR_BIT(COMP->CSR,
                 (  COMP_CSR_COMP1MODE
@@ -948,7 +946,7 @@ ErrorStatus LL_COMP_Init(COMP_TypeDef *COMPx, LL_COMP_InitTypeDef *COMP_InitStru
 
   /* Note: Hardware constraint (refer to description of this function)        */
   /*       COMP instance must not be locked.                                  */
-  if(LL_COMP_IsLocked(COMPx) == 0U)
+  if (LL_COMP_IsLocked(COMPx) == 0U)
   {
     /* Configuration of comparator instance :                                 */
     /*  - PowerMode                                                           */
@@ -960,7 +958,7 @@ ErrorStatus LL_COMP_Init(COMP_TypeDef *COMPx, LL_COMP_InitTypeDef *COMP_InitStru
     /* Note: Connection switch is applicable only to COMP instance COMP1,     */
     /*       therefore is COMP2 is selected the equivalent bit is             */
     /*       kept unmodified.                                                 */
-    if(COMPx == COMP1)
+    if (COMPx == COMP1)
     {
       MODIFY_REG(COMP->CSR,
                  (  COMP_CSR_COMP1MODE
@@ -1012,7 +1010,7 @@ ErrorStatus LL_COMP_Init(COMP_TypeDef *COMPx, LL_COMP_InitTypeDef *COMP_InitStru
 
 /**
   * @brief Set each @ref LL_COMP_InitTypeDef field to default value.
-  * @param COMP_InitStruct: pointer to a @ref LL_COMP_InitTypeDef structure
+  * @param COMP_InitStruct pointer to a @ref LL_COMP_InitTypeDef structure
   *                         whose fields will be set to default values.
   * @retval None
   */

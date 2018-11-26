@@ -16,13 +16,15 @@
 #include <init.h>
 #include <toolchain.h>
 #include <linker/sections.h>
+#include <syscall_handler.h>
+#include <stdbool.h>
 
 extern struct k_alert _k_alert_list_start[];
 extern struct k_alert _k_alert_list_end[];
 
-struct k_alert *_trace_list_k_alert;
-
 #ifdef CONFIG_OBJECT_TRACING
+
+struct k_alert *_trace_list_k_alert;
 
 /*
  * Complete initialization of statically defined alerts.
@@ -47,7 +49,7 @@ void _alert_deliver(struct k_work *work)
 {
 	struct k_alert *alert = CONTAINER_OF(work, struct k_alert, work_item);
 
-	while (1) {
+	while (true) {
 		if ((alert->handler)(alert) == 0) {
 			/* do nothing -- handler has processed the alert */
 		} else {
@@ -66,12 +68,14 @@ void k_alert_init(struct k_alert *alert, k_alert_handler_t handler,
 {
 	alert->handler = handler;
 	alert->send_count = ATOMIC_INIT(0);
-	alert->work_item = (struct k_work)K_WORK_INITIALIZER(_alert_deliver);
+	alert->work_item = (struct k_work)_K_WORK_INITIALIZER(_alert_deliver);
 	k_sem_init(&alert->sem, 0, max_num_pending_alerts);
 	SYS_TRACING_OBJ_INIT(k_alert, alert);
+
+	_k_object_init(alert);
 }
 
-void k_alert_send(struct k_alert *alert)
+void _impl_k_alert_send(struct k_alert *alert)
 {
 	if (alert->handler == K_ALERT_IGNORE) {
 		/* ignore the alert */
@@ -88,7 +92,19 @@ void k_alert_send(struct k_alert *alert)
 	}
 }
 
-int k_alert_recv(struct k_alert *alert, s32_t timeout)
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER1_SIMPLE_VOID(k_alert_send, K_OBJ_ALERT, struct k_alert *);
+#endif
+
+int _impl_k_alert_recv(struct k_alert *alert, s32_t timeout)
 {
 	return k_sem_take(&alert->sem, timeout);
 }
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(k_alert_recv, alert, timeout)
+{
+	Z_OOPS(Z_SYSCALL_OBJ(alert, K_OBJ_ALERT));
+	return _impl_k_alert_recv((struct k_alert *)alert, timeout);
+}
+#endif

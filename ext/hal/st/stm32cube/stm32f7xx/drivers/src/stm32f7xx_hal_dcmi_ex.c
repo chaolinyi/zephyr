@@ -2,17 +2,15 @@
   ******************************************************************************
   * @file    stm32f7xx_hal_dcmi_ex.c
   * @author  MCD Application Team
-  * @version V1.2.0
-  * @date    30-December-2016
   * @brief   Empty file; This file is no longer used to handle the Black&White
   *          feature. Its content is now moved to common files
   *          (stm32f7xx_hal_dcmi.c/.h) as there's no device's dependency within F7
   *          family. It's just kept for compatibility reasons.
-  * 
+  *
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; COPYRIGHT(c) 2016 STMicroelectronics</center></h2>
+  * <h2><center>&copy; COPYRIGHT(c) 2017 STMicroelectronics</center></h2>
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -37,7 +35,7 @@
   * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   *
   ******************************************************************************
-  */ 
+  */
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f7xx_hal.h"

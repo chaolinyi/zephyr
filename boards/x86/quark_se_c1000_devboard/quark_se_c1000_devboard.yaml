@@ -5,3 +5,16 @@ arch: x86
 toolchain:
   - zephyr
   - issm
+  - xtools
+supported:
+  - ieee802154
+  - usb_device
+  - i2c
+  - spi
+  - gpio
+  - rtc
+  - aio
+  - watchdog
+  - dma
+ram: 52
+flash: 144

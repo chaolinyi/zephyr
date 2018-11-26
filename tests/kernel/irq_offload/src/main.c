@@ -1,45 +1,58 @@
 /*
- * Copyright (c) 2015 Wind River Systems, Inc.
+ * Copyright (c) 2017 Intel Corporation
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @file
+ *
+ * This test case verifies the correctness of irq_offload(), an important
+ * routine used in many other test cases for running a function in interrupt
+ * context, on the IRQ stack.
+ *
+ */
 #include <zephyr.h>
-#include <tc_util.h>
+#include <ztest.h>
 #include <kernel_structs.h>
 #include <irq_offload.h>
 
 volatile u32_t sentinel;
 #define SENTINEL_VALUE 0xDEADBEEF
 
-void offload_function(void *param)
+static void offload_function(void *param)
 {
 	u32_t x = (u32_t)param;
 
-	TC_PRINT("offload_function running\n");
-
 	/* Make sure we're in IRQ context */
-	if (!_is_in_isr()) {
-		TC_PRINT("Not in IRQ context!\n");
-		return;
-	}
+	zassert_true(_is_in_isr(), "Not in IRQ context!");
 
 	sentinel = x;
 }
 
-void main(void)
+/**
+ * @brief Verify thread context
+ *
+ * @ingroup kernel_interrupt_tests
+ *
+ * @details Check whether offloaded running function is in interrupt
+ * context, on the IRQ stack or not.
+ */
+void test_irq_offload(void)
 {
-	int rv = TC_PASS;
-
-	TC_START("test_irq_offload");
-
+	/**TESTPOINT: Offload to IRQ context*/
 	irq_offload(offload_function, (void *)SENTINEL_VALUE);
 
-	if (sentinel != SENTINEL_VALUE) {
-		TC_PRINT("irq_offload() didn't work properly\n");
-		rv = TC_FAIL;
-	}
-
-	TC_END_RESULT(rv);
-	TC_END_REPORT(rv);
+	zassert_equal(sentinel, SENTINEL_VALUE,
+		"irq_offload() didn't work properly");
 }
+
+
+void test_main(void)
+{
+	ztest_test_suite(irq_offload_fn,
+			ztest_unit_test(test_irq_offload));
+	ztest_run_test_suite(irq_offload_fn);
+
+}
+

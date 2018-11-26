@@ -66,7 +66,7 @@ This is the name used to identify the event-based idling mechanism of the
 Zephyr RTOS kernel scheduler. The kernel scheduler can run in two modes. During
 normal operation, when at least one thread is active, it sets up the system
 timer in periodic mode and runs in an interval-based scheduling mode. The
-interval-based mode allows it to time slice between tasks. Many times, the
+interval-based mode allows it to time slice between threads. Many times, the
 threads would be waiting on semaphores, timeouts or for events. When there
 are no threads running, it is inefficient for the kernel scheduler to run
 in interval-based mode. This is because, in this mode the timer would trigger
@@ -92,9 +92,11 @@ System Power Management
 
 This consists of the hook functions that the power management subsystem calls
 when the kernel enters and exits the idle state, in other words, when the kernel
-has nothing to schedule. This section provides a general overview of the hook
-functions. Refer to :ref:`power_management_api` for the detailed description of
-the APIs.
+has nothing to schedule. Enabling system power management compels Zephyr kernel
+scheduler to work in tickless idle mode (see :option:`CONFIG_TICKLESS_IDLE`).
+
+This section provides a general overview of the hook functions. Refer to
+:ref:`power_management_api` for the detailed description of the APIs.
 
 Suspend Hook function
 =====================

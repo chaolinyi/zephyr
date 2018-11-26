@@ -163,17 +163,17 @@ struct bt_l2cap_le_conn_req {
 	u16_t credits;
 } __packed;
 
-#define BT_L2CAP_SUCCESS		0x0000
-#define BT_L2CAP_PENDING		0x0001
-#define BT_L2CAP_ERR_PSM_NOT_SUPP	0x0002
-#define BT_L2CAP_ERR_SEC_BLOCK		0x0003
-#define BT_L2CAP_ERR_NO_RESOURCES	0x0004
-#define BT_L2CAP_ERR_AUTHENTICATION	0x0005
-#define BT_L2CAP_ERR_AUTHORIZATION	0x0006
-#define BT_L2CAP_ERR_KEY_SIZE		0x0007
-#define BT_L2CAP_ERR_ENCRYPTION		0x0008
-#define BT_L2CAP_ERR_INVALID_SCID	0x0009
-#define BT_L2CAP_ERR_SCID_IN_USE	0x000A
+/* valid results in conn response on LE */
+#define BT_L2CAP_LE_SUCCESS		0x0000
+#define BT_L2CAP_LE_ERR_PSM_NOT_SUPP	0x0002
+#define BT_L2CAP_LE_ERR_NO_RESOURCES	0x0004
+#define BT_L2CAP_LE_ERR_AUTHENTICATION	0x0005
+#define BT_L2CAP_LE_ERR_AUTHORIZATION	0x0006
+#define BT_L2CAP_LE_ERR_KEY_SIZE	0x0007
+#define BT_L2CAP_LE_ERR_ENCRYPTION	0x0008
+#define BT_L2CAP_LE_ERR_INVALID_SCID	0x0009
+#define BT_L2CAP_LE_ERR_SCID_IN_USE	0x000A
+#define BT_L2CAP_LE_ERR_UNACCEPT_PARAMS	0x000B
 
 #define BT_L2CAP_LE_CONN_RSP		0x15
 struct bt_l2cap_le_conn_rsp {
@@ -192,10 +192,10 @@ struct bt_l2cap_le_credits {
 
 #define BT_L2CAP_SDU_HDR_LEN		2
 
-#if defined(CONFIG_BLUETOOTH_HCI_ACL_FLOW_CONTROL)
-#define BT_L2CAP_RX_MTU CONFIG_BLUETOOTH_L2CAP_RX_MTU
+#if defined(CONFIG_BT_HCI_ACL_FLOW_CONTROL)
+#define BT_L2CAP_RX_MTU CONFIG_BT_L2CAP_RX_MTU
 #else
-#define BT_L2CAP_RX_MTU (CONFIG_BLUETOOTH_RX_BUF_LEN - \
+#define BT_L2CAP_RX_MTU (CONFIG_BT_RX_BUF_LEN - \
 			 BT_HCI_ACL_HDR_SIZE - BT_L2CAP_HDR_SIZE)
 #endif
 
@@ -226,7 +226,7 @@ void bt_l2cap_chan_del(struct bt_l2cap_chan *chan);
 
 const char *bt_l2cap_chan_state_str(bt_l2cap_chan_state_t state);
 
-#if defined(CONFIG_BLUETOOTH_DEBUG_L2CAP)
+#if defined(CONFIG_BT_DEBUG_L2CAP)
 void bt_l2cap_chan_set_state_debug(struct bt_l2cap_chan *chan,
 				   bt_l2cap_chan_state_t state,
 				   const char *func, int line);
@@ -235,7 +235,7 @@ void bt_l2cap_chan_set_state_debug(struct bt_l2cap_chan *chan,
 #else
 void bt_l2cap_chan_set_state(struct bt_l2cap_chan *chan,
 			     bt_l2cap_chan_state_t state);
-#endif /* CONFIG_BLUETOOTH_DEBUG_L2CAP */
+#endif /* CONFIG_BT_DEBUG_L2CAP */
 
 /*
  * Notify L2CAP channels of a change in encryption state passing additionally

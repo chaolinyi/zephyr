@@ -5,8 +5,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef __DRIVERS_I2C_DW_H
-#define __DRIVERS_I2C_DW_H
+#ifndef ZEPHYR_DRIVERS_I2C_I2C_DW_H_
+#define ZEPHYR_DRIVERS_I2C_I2C_DW_H_
 
 #include <i2c.h>
 #include <stdbool.h>
@@ -85,20 +85,20 @@ typedef void (*i2c_isr_cb_t)(struct device *port);
 
 
 struct i2c_dw_rom_config {
-	u32_t	irq_num;
-	u32_t        interrupt_mask;
 	i2c_isr_cb_t	config_func;
 
 #ifdef CONFIG_I2C_DW_SHARED_IRQ
 	char *shared_irq_dev_name;
 #endif /* CONFIG_I2C_DW_SHARED_IRQ */
+
+	u32_t bitrate;
 };
 
 
 struct i2c_dw_dev_config {
 	u32_t base_address;
 	struct k_sem		device_sync_sem;
-	union dev_config	app_config;
+	u32_t app_config;
 
 
 	u8_t			*xfr_buf;
@@ -121,4 +121,4 @@ struct i2c_dw_dev_config {
 }
 #endif
 
-#endif /* __DRIVERS_I2C_DW_H */
+#endif /* ZEPHYR_DRIVERS_I2C_I2C_DW_H_ */

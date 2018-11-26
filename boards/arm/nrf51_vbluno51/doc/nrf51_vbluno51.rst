@@ -35,13 +35,13 @@ Supported Features
 ==================
 
 - CPU:
-	+ Nordic nRF51822: ARM® Cortex™ M0 32bit.
+	+ Nordic nRF51822: ARM |reg| Cortex |trade| M0 32bit.
 	+ *Bluetooth Low Energy interface.*
 	+ 256KB Flash, 32KB Ram.
 	+ UART(1), I2C(2), SPI(1), PWM(3), SWD, Timer 16bit(3).
 	+ 21 digital channels, 6 ADC 10bit channels.
 	+ 1 Led and 1 Button onboard.
-	+ GPIO Voltage: 0 – 3.3V.
+	+ GPIO Voltage: 0 - 3.3V.
 - DAPLink (CMSIS-DAP) interface for program and debug:
 	+ USB MSD: Drag and Drop programming flash memory.
 	+ USB HID (DAP): CMSIS-DAP compliant debug channel.
@@ -59,7 +59,7 @@ Supported Features
 	+ USB port.
 	+ Power adapter: +9 -> +12V.
 	+ 3V Battery: CR20xx holder
-	+ Recharageable battery jump: +3.7 -> +12V
+	+ Rechargeable battery jump: +3.7 -> +12V
 - Open source: Hardware design, firmware, packages, tutorial and example codes
 
 See `VBLUno51 wiki page`_ for full documents and tutorials about the VBLUno51 board.
@@ -95,6 +95,10 @@ More details
 Programming and Debugging
 *************************
 
+Applications for the ``nrf51_vbluno51`` board configuration can be
+built and flashed in the usual way (see :ref:`build_an_application`
+and :ref:`application_run` for more details).
+
 Flashing
 ========
 
@@ -102,23 +106,28 @@ The VBLUno51 board has on-board DAPLink (CMSIS-DAP) interface for flashing and d
 You do not need any other programming device.
 You only need to install pyOCD tool (https://pypi.python.org/pypi/pyOCD)
 
-This tutorial uses the blinky application :ref:`blinky-sample`
+This tutorial uses the blinky application :ref:`blinky-sample`.
 
 See the :ref:`getting_started` for general information on setting up
- your development environment.
+your development environment. Then build and flash the application in
+the usual way.
 
-#. To build the Zephyr kernel along with the blinky sample app, enter:
+.. zephyr-app-commands::
+   :zephyr-app: samples/basic/blinky
+   :board: nrf51_vbluno51
+   :goals: build flash
 
-   .. code-block:: console
+Debugging
+=========
 
-      $ cd $ZEPHYR_BASE/samples/basic/blinky
-      $ make BOARD=nrf51_vbluno51
+You can debug an application in the usual way.  Here is an example for the
+:ref:`blinky-sample` application.
 
-#. To build and flash the generated binary image to the board, enter:
-
-   .. code-block:: console
-
-      $ make BOARD=nrf51_vbluno51 flash
+.. zephyr-app-commands::
+   :zephyr-app: samples/basic/blinky
+   :board: nrf51_vbluno51
+   :maybe-skip-config:
+   :goals: debug
 
 Testing the VBLUno51 with Zephyr: buttons, LEDs, UART, BLE
 **********************************************************

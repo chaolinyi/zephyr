@@ -11,8 +11,8 @@
  * RISCV32-specific kernel exception handling interface.
  */
 
-#ifndef _ARCH_RISCV32_EXP_H_
-#define _ARCH_RISCV32_EXP_H_
+#ifndef ZEPHYR_INCLUDE_ARCH_RISCV32_EXP_H_
+#define ZEPHYR_INCLUDE_ARCH_RISCV32_EXP_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,7 +69,6 @@ extern void _SysFatalErrorHandler(unsigned int reason,
 #endif /* _ASMLANGUAGE */
 
 #define _NANO_ERR_CPU_EXCEPTION (0)      /* Any unhandled exception */
-#define _NANO_ERR_INVALID_TASK_EXIT (1)  /* Invalid task exit */
 #define _NANO_ERR_STACK_CHK_FAIL (2)     /* Stack corruption detected */
 #define _NANO_ERR_ALLOCATION_FAIL (3)    /* Kernel Allocation Failure */
 #define _NANO_ERR_SPURIOUS_INT (4)	 /* Spurious interrupt */
@@ -80,4 +79,4 @@ extern void _SysFatalErrorHandler(unsigned int reason,
 }
 #endif
 
-#endif /* _ARCH_RISCV32_EXP_H_ */
+#endif /* ZEPHYR_INCLUDE_ARCH_RISCV32_EXP_H_ */

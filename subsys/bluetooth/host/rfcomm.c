@@ -20,8 +20,10 @@
 #include <bluetooth/hci_driver.h>
 #include <bluetooth/l2cap.h>
 
-#define BT_DBG_ENABLED IS_ENABLED(CONFIG_BLUETOOTH_DEBUG_RFCOMM)
-/* FIXME: #include "common/log.h" */
+#define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_RFCOMM)
+#define LOG_MODULE_NAME bt_rfcomm
+#include "common/log.h"
+
 #include <bluetooth/rfcomm.h>
 
 #include "hci_core.h"
@@ -35,10 +37,10 @@
 #define RFCOMM_MIN_MTU		BT_RFCOMM_SIG_MIN_MTU
 #define RFCOMM_DEFAULT_MTU	127
 
-#if defined(CONFIG_BLUETOOTH_HCI_ACL_FLOW_CONTROL)
-#define RFCOMM_MAX_CREDITS		(CONFIG_BLUETOOTH_ACL_RX_COUNT - 1)
+#if defined(CONFIG_BT_HCI_ACL_FLOW_CONTROL)
+#define RFCOMM_MAX_CREDITS		(CONFIG_BT_ACL_RX_COUNT - 1)
 #else
-#define RFCOMM_MAX_CREDITS		(CONFIG_BLUETOOTH_RX_BUF_COUNT - 1)
+#define RFCOMM_MAX_CREDITS		(CONFIG_BT_RX_BUF_COUNT - 1)
 #endif
 
 #define RFCOMM_CREDITS_THRESHOLD	(RFCOMM_MAX_CREDITS / 2)
@@ -55,12 +57,12 @@
 static struct bt_rfcomm_server *servers;
 
 /* Pool for dummy buffers to wake up the tx threads */
-NET_BUF_POOL_DEFINE(dummy_pool, CONFIG_BLUETOOTH_MAX_CONN, 0, 0, NULL);
+NET_BUF_POOL_DEFINE(dummy_pool, CONFIG_BT_MAX_CONN, 0, 0, NULL);
 
 #define RFCOMM_SESSION(_ch) CONTAINER_OF(_ch, \
 					 struct bt_rfcomm_session, br_chan.chan)
 
-static struct bt_rfcomm_session bt_rfcomm_pool[CONFIG_BLUETOOTH_MAX_CONN];
+static struct bt_rfcomm_session bt_rfcomm_pool[CONFIG_BT_MAX_CONN];
 
 /* reversed, 8-bit, poly=0x07 */
 static const u8_t rfcomm_crc_table[256] = {
@@ -1443,7 +1445,7 @@ int bt_rfcomm_dlc_send(struct bt_rfcomm_dlc *dlc, struct net_buf *buf)
 	return buf->len;
 }
 
-static void rfcomm_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
+static int rfcomm_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 {
 	struct bt_rfcomm_session *session = RFCOMM_SESSION(chan);
 	struct bt_rfcomm_hdr *hdr = (void *)buf->data;
@@ -1452,7 +1454,7 @@ static void rfcomm_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 	/* Need to consider FCS also*/
 	if (buf->len < (sizeof(*hdr) + 1)) {
 		BT_ERR("Too small RFCOMM Frame");
-		return;
+		return 0;
 	}
 
 	dlci = BT_RFCOMM_GET_DLCI(hdr->address);
@@ -1465,7 +1467,7 @@ static void rfcomm_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 	fcs = *(net_buf_tail(buf) - 1);
 	if (!rfcomm_check_fcs(fcs_len, buf->data, fcs)) {
 		BT_ERR("FCS check failed");
-		return;
+		return 0;
 	}
 
 	if (BT_RFCOMM_LEN_EXTENDED(hdr->length)) {
@@ -1500,6 +1502,8 @@ static void rfcomm_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 			frame_type);
 		break;
 	}
+
+	return 0;
 }
 
 static void rfcomm_encrypt_change(struct bt_l2cap_chan *chan,
@@ -1575,7 +1579,7 @@ static struct bt_rfcomm_session *rfcomm_session_new(bt_rfcomm_role_t role)
 		BT_DBG("session %p initialized", session);
 
 		session->br_chan.chan.ops = &ops;
-		session->br_chan.rx.mtu	= CONFIG_BLUETOOTH_RFCOMM_L2CAP_MTU;
+		session->br_chan.rx.mtu	= CONFIG_BT_RFCOMM_L2CAP_MTU;
 		session->state = BT_RFCOMM_STATE_INIT;
 		session->role = role;
 		session->cfc = BT_RFCOMM_CFC_UNKNOWN;

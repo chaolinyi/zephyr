@@ -2,13 +2,11 @@
   ******************************************************************************
   * @file    stm32f7xx_ll_pwr.c
   * @author  MCD Application Team
-  * @version V1.2.0
-  * @date    30-December-2016
   * @brief   PWR LL module driver.
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; COPYRIGHT(c) 2016 STMicroelectronics</center></h2>
+  * <h2><center>&copy; COPYRIGHT(c) 2017 STMicroelectronics</center></h2>
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -78,7 +76,7 @@ ErrorStatus LL_PWR_DeInit(void)
 
   /* Release reset of PWR clock */
   LL_APB1_GRP1_ReleaseReset(LL_APB1_GRP1_PERIPH_PWR);
-  
+
   WRITE_REG(PWR->CR2, (PWR_CR2_CWUPF1 | PWR_CR2_CWUPF2 | PWR_CR2_CWUPF3 | PWR_CR2_CWUPF4 | PWR_CR2_CWUPF5 | PWR_CR2_CWUPF6));
 
   return SUCCESS;

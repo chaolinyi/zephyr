@@ -8,8 +8,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef __BT_BUF_H
-#define __BT_BUF_H
+#ifndef ZEPHYR_INCLUDE_BLUETOOTH_BUF_H_
+#define ZEPHYR_INCLUDE_BLUETOOTH_BUF_H_
 
 /**
  * @brief Data buffers
@@ -38,8 +38,7 @@ enum bt_buf_type {
 #define BT_BUF_USER_DATA_MIN 4
 
 /** Data size neeed for HCI RX buffers */
-#define BT_BUF_RX_SIZE (CONFIG_BLUETOOTH_HCI_RESERVE + \
-			CONFIG_BLUETOOTH_RX_BUF_LEN)
+#define BT_BUF_RX_SIZE (CONFIG_BT_HCI_RESERVE + CONFIG_BT_RX_BUF_LEN)
 
 /** Allocate a buffer for incoming data
  *
@@ -83,11 +82,17 @@ static inline void bt_buf_set_type(struct net_buf *buf, enum bt_buf_type type)
  */
 static inline enum bt_buf_type bt_buf_get_type(struct net_buf *buf)
 {
-	return *(u8_t *)net_buf_user_data(buf);
+	/* De-referencing the pointer from net_buf_user_data(buf) as a
+	 * pointer to an enum causes issues on qemu_x86 because the true
+	 * size is 8-bit, but the enum is 32-bit on qemu_x86. So we put in
+	 * a temporary cast to 8-bit to ensure only 8 bits are read from
+	 * the pointer.
+	 */
+	return (enum bt_buf_type)(*(u8_t *)net_buf_user_data(buf));
 }
 
 /**
  * @}
  */
 
-#endif /* __BT_BUF_H */
+#endif /* ZEPHYR_INCLUDE_BLUETOOTH_BUF_H_ */

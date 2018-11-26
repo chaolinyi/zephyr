@@ -1,7 +1,7 @@
 GAP PICS
 ########
 
-PTS version: 6.4
+PTS version: 7.2.0
 
 \* - different than PTS defaults
 
@@ -34,6 +34,7 @@ TSPC_GAP_0A_1	False (*)	Core Specification Addendum 3 (CSA3) (C.1)
 TSPC_GAP_0A_2	False (*)	Core Specification Addendum 4 (CSA4) (C.2)
 TSPC_GAP_0A_3	False (*)	Core Spec version 4.1 (Core v4.1) (C.3)
 TSPC_GAP_0A_4	True		Core Spec version 4.2 (Core v4.2) (C.4)
+TSPC_GAP_0A_5	False (*)	Core Spec version 5.0 (Core v5.0) (C.4)
 ==============	==============	=======================================
 
 
@@ -68,6 +69,7 @@ TSPC_GAP_2_4	False (*)	Security mode 1 (C.2)
 TSPC_GAP_2_5	False (*)	Security mode 2 (O)
 TSPC_GAP_2_6	False (*)	Security mode 3 (C.7)
 TSPC_GAP_2_7	False (*)	Security mode 4 (C.4)
+TSPC_GAP_2_7a	False (*)	Security mode 4, level 4 (C.9)
 TSPC_GAP_2_8	False (*)	Support of Authenticated link key (C.6)
 TSPC_GAP_2_9	False (*)	Support of Unauthenticated link key (C.6)
 TSPC_GAP_2_10	False (*)	No security (C.6)
@@ -152,6 +154,10 @@ Parameter Name	Selected	Description
 ==============	==============	=======================================
 TSPC_GAP_8_1	True		Non-Connectable Undirected Event (M)
 TSPC_GAP_8_2	True		Scannable Undirected Event (O)
+TSPC_GAP_8_3	False (*)	Non-Connectable and Non-Scannable
+				Directed Event (C.1)
+TSPC_GAP_8_4	False (*)	Scannable Directed Event (C.1)
+
 ==============	==============	=======================================
 
 
@@ -163,7 +169,7 @@ Parameter Name	Selected	Description
 ==============	==============	=======================================
 TSPC_GAP_8A_1	True		AD Type-Service UUID (O)
 TSPC_GAP_8A_2	True		AD Type-Local Name (O)
-TSPC_GAP_8A_3	True		AD Type-Flags (C.2)
+TSPC_GAP_8A_3	True		AD Type-Flags (O)
 TSPC_GAP_8A_4	True		AD Type-Manufacturer Specific Data (O)
 TSPC_GAP_8A_5	False (*)	AD Type-TX Power Level (O)
 TSPC_GAP_8A_6	False (*)	AD Type-Security Manager Out of Band
@@ -178,7 +184,7 @@ TSPC_GAP_8A_13	False (*)	AD Type-Random Target Address (O)
 TSPC_GAP_8A_14	False (*)	AD Type-Advertising Interval (O)
 TSPC_GAP_8A_15	False (*)	AD Type-LE Bluetooth Device Address (O)
 TSPC_GAP_8A_16	False (*)	AD Type-LE Role (O)
-TSPC_GAP_8A_17	(^)		AD Type-URI (C.3)
+TSPC_GAP_8A_17	False (*)	AD Type-URI (C.3)
 ==============	==============	=======================================
 
 
@@ -208,13 +214,23 @@ Broadcaster Privacy Feature
 ==============	==============	=======================================
 Parameter Name	Selected	Description
 ==============	==============	=======================================
-TSPC_GAP_11_1	False (*)	Privacy Feature v1.0 (C.2)
-TSPC_GAP_11_1A	False (*)	Privacy Feature v1.1 (C.3)
-TSPC_GAP_11_1B	(^)		Privacy Feature v1.2 (C.5)
-TSPC_GAP_11_2	False (*)	Resolvable Private Address Generation
+TSPC_GAP_11_1	True		Privacy Feature v1.0 (O)
+TSPC_GAP_11_2	True		Resolvable Private Address Generation
 				Procedure (C.1)
 TSPC_GAP_11_3	False (*)	Non-Resolvable Private Address Generation
-				Procedure (C.4)
+				Procedure (C.2)
+==============	==============	=======================================
+
+
+Periodic Advertising Modes and Procedures
+*****************************************
+
+==============	==============	=======================================
+Parameter Name	Selected	Description
+==============	==============	=======================================
+TSPC_GAP_11A_1	False (*)	Periodic Advertising Synchronizability
+				mode (C.1)
+TSPC_GAP_11A_2	False (*)	Periodic Advertising mode (C.2)
 ==============	==============	=======================================
 
 
@@ -277,15 +293,28 @@ Observer Privacy Feature
 ==============	==============	=======================================
 Parameter Name	Selected	Description
 ==============	==============	=======================================
-TSPC_GAP_17_1	False (*)	Privacy Feature v1.0 (C.4)
-TSPC_GAP_17_1A	False (*)	Privacy Feature v1.1 (C.5)
-TSPC_GAP_17_1B	(^)		Privacy Feature v1.2 (C.6)
+TSPC_GAP_17_1	True		Privacy Feature v1.0 (O)
 TSPC_GAP_17_2	False (*)	Non-Resolvable Private Address Generation
 				Procedure (C.1)
-TSPC_GAP_17_3	False (*)	Resolvable Private Address Resolution
+TSPC_GAP_17_3	True		Resolvable Private Address Resolution
 				Procedure (C.2)
-TSPC_GAP_17_4	False (*)	Resolvable Private Address Generation
+TSPC_GAP_17_4	True		Resolvable Private Address Generation
 				Procedure (C.3)
+==============	==============	=======================================
+
+
+Periodic Advertising Modes and Procedures
+*****************************************
+
+==============	==============	=======================================
+Parameter Name	Selected	Description
+==============	==============	=======================================
+TSPC_GAP_17A_1	False (*)	Periodic Advertising Synchronization
+				Establishment procedure without listening
+				for periodic advertising (C.1)
+TSPC_GAP_17A_2	False (*)	Periodic Advertising Synchronization
+				Establishment procedure with listening for
+				periodic advertising (C.1)
 ==============	==============	=======================================
 
 
@@ -322,6 +351,9 @@ TSPC_GAP_20_1	True		Connectable Undirected Event (C.1)
 TSPC_GAP_20_2	True		Connectable Directed Event (C.2)
 TSPC_GAP_20_3	True		Non-Connectable Undirected Event (O)
 TSPC_GAP_20_4	True		Scannable Undirected Event (O)
+TSPC_GAP_20_5	False (*)	Connectable Undirected Event (C.3)
+TSPC_GAP_20_6	False (*)	Non-Connectable and Non-Scannable Directed Event (C.3)
+TSPC_GAP_20_7	False (*)	Scannable Directed Event (C.3)
 ==============	==============	=======================================
 
 
@@ -348,7 +380,7 @@ TSPC_GAP_20A_13	False (*)	AD Type-Random Target Address (C.1)
 TSPC_GAP_20A_14	False (*)	AD Type-Advertising Interval (C.1)
 TSPC_GAP_20A_15	False (*)	AD Type-LE Bluetooth Device Address (C.1)
 TSPC_GAP_20A_16	False (*)	AD Type-LE Role (C.1)
-TSPC_GAP_20A_17	(^)		AD Type-URI (C.4)
+TSPC_GAP_20A_17	False (*)	AD Type-URI (C.4)
 ===============	=============	=======================================
 
 
@@ -368,6 +400,9 @@ TSPC_GAP_21_7	False (*)	LE Ping Procedure (C.3)
 TSPC_GAP_21_8	True		Slave Initiated Feature Exchange Procedure
 				(C.4)
 TSPC_GAP_21_9	True		Connection Parameter Request Procedure (C.5)
+TSPC_GAP_21_10	True		Data Length Update Procedure (C.6)
+TSPC_GAP_21_11	True		PHY Update Procedure (C.7)
+TSPC_GAP_21_12	False (*)	Minimum Number Of Used Channels Procedure (C.7)
 ==============	==============	=======================================
 
 
@@ -393,7 +428,7 @@ Parameter Name	Selected	Description
 TSPC_GAP_23_1	True		Non-Connectable Mode (M)
 TSPC_GAP_23_2	False (*)	Directed Connectable Mode (C.1)
 TSPC_GAP_23_3	True		Undirected Connectable Mode (C.2)
-TSPC_GAP_23_4	True		Connection Parameter Update Procedure (C.2)
+TSPC_GAP_23_4	True		Connection Parameter Update Procedure (C.1)
 TSPC_GAP_23_5	True		Terminate Connection Procedure (C.2)
 ==============	==============	=======================================
 
@@ -427,8 +462,8 @@ TSPC_GAP_25_7	True		Authenticated Pairing
 				(LE security mode 1 level 3) (C.1)
 TSPC_GAP_25_8	True		Unauthenticated Pairing
 				(LE security mode 1 level 2) (C.1)
-TSPC_GAP_25_9	(^)		LE Security Mode 1 Level 4 (C.3)
-TSPC_GAP_25_10	(^)		Secure Connections Only Mode  (C.4)
+TSPC_GAP_25_9	True		LE Security Mode 1 Level 4 (C.3)
+TSPC_GAP_25_10	False (*)	Secure Connections Only Mode  (C.4)
 ==============	==============	=======================================
 
 
@@ -438,15 +473,13 @@ Peripheral Privacy Feature
 ==============	==============	=======================================
 Parameter Name	Selected	Description
 ==============	==============	=======================================
-TSPC_GAP_26_1	False (*)	Privacy Feature (C.5)
-TSPC_GAP_26_1A	False (*)	Privacy Feature v1.1 (C.3)
-TSPC_GAP_26_1B	(^)		Privacy Feature v1.2 (C.6)
-TSPC_GAP_26_2	False (*)	Non-Resolvable Private Address Generation
+TSPC_GAP_26_1	True		Privacy Feature (O)
+TSPC_GAP_26_2	True		Non-Resolvable Private Address Generation
 				Procedure (C.1)
-TSPC_GAP_26_3	False (*)	Resolvable Private Address Generation
+TSPC_GAP_26_3	True		Resolvable Private Address Generation
 				Procedure (C.2)
-TSPC_GAP_26_4	False (*)	Resolvable Private Address Generation
-				Procedure (C.4)
+TSPC_GAP_26_4	True		Resolvable Private Address Generation
+				Procedure (C.3)
 ==============	==============	=======================================
 
 
@@ -462,9 +495,10 @@ TSPC_GAP_27_3	False (*)	Peripheral Privacy Flag (C.1)
 TSPC_GAP_27_4	False (*)	Reconnection Address (C.2)
 TSPC_GAP_27_5	False (*)	Peripheral Preferred Connection Parameters
 				(C.3)
-TSPC_GAP_27_6	True		Writable Device Name (C.3)
-TSPC_GAP_27_7	True		Writable Appearance (C.3)
+TSPC_GAP_27_6	False (*)	Writable Device Name (C.3)
+TSPC_GAP_27_7	False (*)	Writable Appearance (C.3)
 TSPC_GAP_27_8	False (*)	Writable Peripheral Privacy Flag (C.4)
+TSPC_GAP_27_9	False (*)	Central Address Resolution (C.5)
 ==============	==============	=======================================
 
 
@@ -518,7 +552,10 @@ TSPC_GAP_31_6	True		Termination Procedure (M)
 TSPC_GAP_31_7	False (*)	LE Ping Procedure (C.1)
 TSPC_GAP_31_8	True		Slave Initiated Feature Exchange Procedure
 				(C.2)
-TSPC_GAP_31_9	False (*)	Connection Parameter Request Procedure (C.1)
+TSPC_GAP_31_9	False (*)	Connection Parameter Request Procedure (C.3)
+TSPC_GAP_31_10	True		Data Length Update Procedure (C.4)
+TSPC_GAP_31_11	True		PHY Update Procedure (C.5)
+TSPC_GAP_31_12	False (*)	Minimum Number Of Used Channels Procedure (C.5)
 ==============	==============	=======================================
 
 
@@ -578,8 +615,8 @@ TSPC_GAP_35_7	True		Authenticated Pairing
 				(LE security mode 1 level 3) (C.1)
 TSPC_GAP_35_8	True		Unauthenticated Pairing
 				(LE security mode 1 level 2) (C.1)
-TSPC_GAP_35_9	(^)		LE Security Mode 1 Level 4 (C.2)
-TSPC_GAP_35_10	(^)		Secure Connections Only Mode  (C.3)
+TSPC_GAP_35_9	True		LE Security Mode 1 Level 4 (C.2)
+TSPC_GAP_35_10	True		Secure Connections Only Mode  (C.3)
 ==============	==============	=======================================
 
 
@@ -589,17 +626,15 @@ Central Privacy Feature
 ==============	==============	=======================================
 Parameter Name	Selected	Description
 ==============	==============	=======================================
-TSPC_GAP_36_1	False (*)	Privacy Feature v1.0 (C.2)
-TSPC_GAP_36_1A	False (*)	Privacy Feature v1.1 (C.4)
-TSPC_GAP_36_1B	(^)		Privacy Feature v1.2 (C.7)
+TSPC_GAP_36_1	True		Privacy Feature v1.0 (O)
 TSPC_GAP_36_2	False (*)	Non-Resolvable Private Address Generation
 				Procedure (C.1)
-TSPC_GAP_36_3	False (*)	Resolvable Private Address Resolution
-				Procedure (C.3)
+TSPC_GAP_36_3	True		Resolvable Private Address Resolution
+				Procedure (C.2)
 TSPC_GAP_36_4	False (*)	Write to Privacy Characteristic
-				(Enable/Disable Privacy) (C.5)
-TSPC_GAP_36_5	False (*)	Resolvable Private Address Generation
-				Procedure (C.6)
+				(Enable/Disable Privacy) (C.3)
+TSPC_GAP_36_5	True		Resolvable Private Address Generation
+				Procedure (C.4)
 ==============	==============	=======================================
 
 
@@ -611,7 +646,7 @@ Parameter Name	Selected	Description
 ==============	==============	=======================================
 TSPC_GAP_37_1	True		Device Name (M)
 TSPC_GAP_37_2	True		Appearance (M)
-TSPC_GAP_37_3	(^)		Central Address Resolution  (C.1)
+TSPC_GAP_37_3	True		Central Address Resolution  (C.1)
 ==============	==============	=======================================
 
 
@@ -664,7 +699,8 @@ Central BR/EDR/LE Security Aspects
 Parameter Name	Selected	Description
 ==============	==============	=======================================
 TSPC_GAP_41_1	False (*)	Security Aspects (M)
-TSPC_GAP_41_2	(^)		Cross-Transport Key Derivation (C.1)
+TSPC_GAP_41_2A	False (*)	Derivation of BR/EDR Link Key from LE LTK (C.1)
+TSPC_GAP_41_2B	False (*)	Derivation of LE LTK from BR/EDR Link Key (C.1)
 ==============	==============	=======================================
 
 
@@ -690,7 +726,8 @@ Peripheral BR/EDR/LE Security Aspects
 Parameter Name	Selected	Description
 ==============	==============	=======================================
 TSPC_GAP_43_1	False (*)	Peripheral BR/EDR/LE: Non-Discoverable Mode
-TSPC_GAP_43_2	(^)		Cross-Transport Key Derivation (C.1)
+TSPC_GAP_43_2A	False (*)	Derivation of BR/EDR Link Key from LE LTK (C.1)
+TSPC_GAP_43_2B	False (*)	Derivation of LE LTK from BR/EDR Link Key (C.1)
 ==============	==============	=======================================
 
 

@@ -1,4 +1,0 @@
-tests:
--   test:
-        build_only: false
-        tags: crypto aes

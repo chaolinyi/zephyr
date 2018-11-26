@@ -2,8 +2,6 @@
   ******************************************************************************
   * @file    stm32f4xx_hal_iwdg.h
   * @author  MCD Application Team
-  * @version V1.7.0
-  * @date    17-February-2017
   * @brief   Header file of IWDG HAL module.
   ******************************************************************************
   * @attention
@@ -59,7 +57,7 @@
   * @{
   */
 
-/** 
+/**
   * @brief  IWDG Init structure definition
   */
 typedef struct
@@ -102,10 +100,6 @@ typedef struct
 #define IWDG_PRESCALER_64               IWDG_PR_PR_2                  /*!< IWDG prescaler set to 64  */
 #define IWDG_PRESCALER_128              (IWDG_PR_PR_2 | IWDG_PR_PR_0) /*!< IWDG prescaler set to 128 */
 #define IWDG_PRESCALER_256              (IWDG_PR_PR_2 | IWDG_PR_PR_1) /*!< IWDG prescaler set to 256 */
-/**
-  * @}
-  */
-
 /**
   * @}
   */

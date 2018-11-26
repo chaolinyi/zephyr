@@ -24,6 +24,7 @@
 #include <linker/sections.h>
 #include <sw_isr_table.h>
 #include <irq.h>
+#include <misc/printk.h>
 
 /*
  * @brief Enable an interrupt line
@@ -37,7 +38,7 @@
 
 void _arch_irq_enable(unsigned int irq)
 {
-	int key = irq_lock();
+	unsigned int key = irq_lock();
 
 	_arc_v2_irq_unit_int_enable(irq);
 	irq_unlock(key);
@@ -54,7 +55,7 @@ void _arch_irq_enable(unsigned int irq)
 
 void _arch_irq_disable(unsigned int irq)
 {
-	int key = irq_lock();
+	unsigned int key = irq_lock();
 
 	_arc_v2_irq_unit_int_disable(irq);
 	irq_unlock(key);
@@ -78,7 +79,7 @@ void _irq_priority_set(unsigned int irq, unsigned int prio, u32_t flags)
 {
 	ARG_UNUSED(flags);
 
-	int key = irq_lock();
+	unsigned int key = irq_lock();
 
 	__ASSERT(prio < CONFIG_NUM_IRQ_PRIO_LEVELS,
 		 "invalid priority %d for irq %d", prio, irq);
@@ -95,7 +96,6 @@ void _irq_priority_set(unsigned int irq, unsigned int prio, u32_t flags)
  * @return N/A
  */
 
-#include <misc/printk.h>
 void _irq_spurious(void *unused)
 {
 	ARG_UNUSED(unused);
@@ -104,3 +104,13 @@ void _irq_spurious(void *unused)
 		;
 }
 
+#ifdef CONFIG_DYNAMIC_INTERRUPTS
+int _arch_irq_connect_dynamic(unsigned int irq, unsigned int priority,
+			      void (*routine)(void *parameter), void *parameter,
+			      u32_t flags)
+{
+	z_isr_install(irq, routine, parameter);
+	_irq_priority_set(irq, priority, flags);
+	return irq;
+}
+#endif /* CONFIG_DYNAMIC_INTERRUPTS */

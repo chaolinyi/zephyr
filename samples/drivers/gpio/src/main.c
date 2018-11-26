@@ -15,7 +15,7 @@
  * BUTTON1 is on DIO_4
  * BUTTON2 is on DIO_0
  *
- * This sample toogles LED1 and wait interrupt on BUTTON1.
+ * This sample toggles LED1 and wait interrupt on BUTTON1.
  * Note that an internet pull-up is set on BUTTON1 as the button
  * only drives low when pressed.
  *
@@ -108,6 +108,12 @@
  * Toggling GPIO_8
  * GPIO_24 triggered
  * "
+ *
+ * ESP32
+ * -----
+ *
+ * An LED should be connected to pin IO4, and either a jumper cable or
+ * button should be connected between IO2 and GND.
  */
 
 #include <zephyr.h>
@@ -118,36 +124,50 @@
 #include <gpio.h>
 #include <misc/util.h>
 
-#if defined(CONFIG_SOC_QUARK_SE_C1000_SS)
-#define GPIO_OUT_PIN	2
-#define GPIO_INT_PIN	3
-#define GPIO_NAME	"GPIO_SS_"
-#elif defined(CONFIG_SOC_QUARK_SE_C1000)
-#define GPIO_OUT_PIN	16
-#define GPIO_INT_PIN	19
-#define GPIO_NAME	"GPIO_"
+#if defined(CONFIG_BOARD_QUARK_SE_C1000_DEVBOARD)
+#define GPIO_OUT_PIN 15 /* GPIO15_I2S_RXD */
+#define GPIO_INT_PIN 16 /* GPIO16_I2S_RSCK */
+#define GPIO_NAME       "GPIO_"
+#elif defined(CONFIG_BOARD_QUARK_SE_C1000_DEVBOARD_SS)
+#define GPIO_OUT_PIN 4  /* GPIO_SS_AIN_12 */
+#define GPIO_INT_PIN 5  /* GPIO_SS_AIN_13 */
+#define GPIO_NAME       "GPIO_SS"
+#elif defined(CONFIG_BOARD_ARDUINO_101)
+#define GPIO_OUT_PIN 16  /* IO8 */
+#define GPIO_INT_PIN 19  /* IO4 */
+#define GPIO_NAME       "GPIO_"
+#elif defined(CONFIG_BOARD_ARDUINO_101_SSS)
+#define GPIO_OUT_PIN 2  /* AD0 */
+#define GPIO_INT_PIN 3  /* AD1 */
+#define GPIO_NAME       "GPIO_SS"
+#elif defined(CONFIG_BOARD_QUARK_D2000_CRB)
+#define GPIO_OUT_PIN 8  /* DIO7 */
+#define GPIO_INT_PIN 9  /* DIO8 */
+#define GPIO_NAME       "GPIO_"
 #elif defined(CONFIG_SOC_PART_NUMBER_SAM3X8E)
-#define GPIO_OUT_PIN	25
-#define GPIO_INT_PIN	27
-#define GPIO_NAME	"GPIO_"
-#elif defined(CONFIG_SOC_QUARK_D2000)
-#define GPIO_OUT_PIN	8
-#define GPIO_INT_PIN	24
-#define GPIO_NAME	"GPIO_"
+#define GPIO_OUT_PIN    25
+#define GPIO_INT_PIN    27
+#define GPIO_NAME       "GPIO_"
 #elif defined(CONFIG_SOC_CC2650)
-#define GPIO_OUT_PIN	10
-#define GPIO_INT_PIN	4
-#define GPIO_NAME	"GPIO_"
+#define GPIO_OUT_PIN    10
+#define GPIO_INT_PIN    4
+#define GPIO_NAME       "GPIO_"
+#elif defined(CONFIG_BOARD_ESP32)
+#define GPIO_OUT_PIN 4  /* DIO4 */
+#define GPIO_INT_PIN 2  /* DIO2 */
+#define GPIO_NAME       "GPIO_"
 #endif
 
 #if defined(CONFIG_GPIO_DW_0)
 #define GPIO_DRV_NAME CONFIG_GPIO_DW_0_NAME
 #elif defined(CONFIG_GPIO_QMSI_0) && defined(CONFIG_SOC_QUARK_SE_C1000)
-#define GPIO_DRV_NAME CONFIG_GPIO_QMSI_0_NAME
+#define GPIO_DRV_NAME DT_GPIO_QMSI_0_NAME
 #elif defined(CONFIG_GPIO_QMSI_SS_0)
-#define GPIO_DRV_NAME CONFIG_GPIO_QMSI_SS_0_NAME
+#define GPIO_DRV_NAME DT_GPIO_QMSI_SS_0_NAME
 #elif defined(CONFIG_GPIO_ATMEL_SAM3)
 #define GPIO_DRV_NAME CONFIG_GPIO_ATMEL_SAM3_PORTB_DEV_NAME
+#elif defined(CONFIG_GPIO_ESP32)
+#define GPIO_DRV_NAME CONFIG_GPIO_ESP32_0_NAME
 #else
 #define GPIO_DRV_NAME "GPIO_0"
 #endif

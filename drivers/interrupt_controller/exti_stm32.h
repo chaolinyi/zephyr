@@ -9,17 +9,17 @@
  *
  * Based on reference manuals:
  *   RM0008 Reference Manual: STM32F101xx, STM32F102xx, STM32F103xx, STM32F105xx
- *   and STM32F107xx advanced ARM-based 32-bit MCUs
+ *   and STM32F107xx advanced ARM(r)-based 32-bit MCUs
  * and
  *   RM0368 Reference manual STM32F401xB/C and STM32F401xD/E
- *   advanced ARM-based 32-bit MCUs
+ *   advanced ARM(r)-based 32-bit MCUs
  *
  * Chapter 10.2: External interrupt/event controller (EXTI)
  *
  */
 
-#ifndef _STM32_EXTI_H_
-#define _STM32_EXTI_H_
+#ifndef ZEPHYR_DRIVERS_INTERRUPT_CONTROLLER_EXTI_STM32_H_
+#define ZEPHYR_DRIVERS_INTERRUPT_CONTROLLER_EXTI_STM32_H_
 
 #include <zephyr/types.h>
 
@@ -77,4 +77,4 @@ void stm32_exti_set_callback(int line, stm32_exti_callback_t cb, void *data);
  */
 void stm32_exti_unset_callback(int line);
 
-#endif /* _STM32_EXTI_H_ */
+#endif /* ZEPHYR_DRIVERS_INTERRUPT_CONTROLLER_EXTI_STM32_H_ */

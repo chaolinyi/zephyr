@@ -24,9 +24,6 @@ _ASM_FILE_PROLOGUE
 GTEXT(_ExcExit)
 GTEXT(_IntExit)
 GDATA(_kernel)
-#ifdef CONFIG_TIMESLICING
-GTEXT(_update_time_slice_before_swap)
-#endif
 
 /**
  *
@@ -58,17 +55,6 @@ SECTION_SUBSEC_FUNC(TEXT, _HandlerModeExit, _IntExit)
 
 /* _IntExit falls through to _ExcExit (they are aliases of each other) */
 
-#ifdef CONFIG_TIMESLICING
-    push {lr}
-    bl _update_time_slice_before_swap
-#if defined(CONFIG_ARMV6_M)
-    pop {r0}
-    mov lr, r0
-#else
-    pop {lr}
-#endif /* CONFIG_ARMV6_M */
-#endif
-
 /**
  *
  * @brief Kernel housekeeping when exiting exception handler installed
@@ -85,14 +71,6 @@ SECTION_SUBSEC_FUNC(TEXT, _HandlerModeExit, _ExcExit)
     ldr r0, =_kernel
 
     ldr r1, [r0, #_kernel_offset_to_current]
-
-    /*
-     * Non-preemptible thread ? Do not schedule (see explanation of
-     * preempt field in kernel_struct.h).
-     */
-    ldrh r2, [r1, #_thread_offset_to_preempt]
-    cmp r2, #_PREEMPT_THRESHOLD
-    bhi _EXIT_EXC
 
     ldr r0, [r0, _kernel_offset_to_ready_q_cache]
     cmp r0, r1
@@ -111,12 +89,12 @@ _EXIT_EXC:
 #ifdef CONFIG_STACK_SENTINEL
     push {lr}
     bl _check_stack_sentinel
-#if defined(CONFIG_ARMV6_M)
+#if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
     pop {r0}
     mov lr, r0
 #else
     pop {lr}
-#endif /* CONFIG_ARMV6_M */
+#endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
 #endif /* CONFIG_STACK_SENTINEL */
 
     bx lr

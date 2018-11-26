@@ -23,6 +23,7 @@
 GTEXT(_rirq_enter)
 GTEXT(_rirq_exit)
 GTEXT(_rirq_common_interrupt_swap)
+GDATA(exc_nest_count)
 
 #if 0 /* TODO: when FIRQ is not present, all would be regular */
 #define NUM_REGULAR_IRQ_PRIO_LEVELS CONFIG_NUM_IRQ_PRIO_LEVELS
@@ -33,14 +34,6 @@ GTEXT(_rirq_common_interrupt_swap)
  * that all others are regular interrupts.
  * TODO: Revist this if FIRQ becomes configurable.
  */
-
-#if NUM_REGULAR_IRQ_PRIO_LEVELS > 1
-#error "nested regular interrupts are not supported."
-/*
- * Nesting of Regularing interrupts is not yet supported.
- * Set CONFIG_NUM_IRQ_PRIO_LEVELS to 2 even if SOC supports more.
- */
-#endif
 
 
 /**
@@ -58,20 +51,36 @@ GTEXT(_rirq_common_interrupt_swap)
 
 SECTION_FUNC(TEXT, _rirq_enter)
 
-	mov r1, _kernel
+
 #ifdef CONFIG_ARC_STACK_CHECKING
+#ifdef CONFIG_ARC_HAS_SECURE
+	lr r2, [_ARC_V2_SEC_STAT]
+	bclr r2, r2, _ARC_V2_SEC_STAT_SSC_BIT
+	/* sflag r2 */
+	/* sflag instruction is not supported in current ARC GNU */
+	.long 0x00bf302f
+#else
 	/* disable stack checking */
 	lr r2, [_ARC_V2_STATUS32]
 	bclr r2, r2, _ARC_V2_STATUS32_SC_BIT
 	kflag r2
 #endif
-	ld_s r2, [r1, _kernel_offset_to_current]
-#if NUM_REGULAR_IRQ_PRIO_LEVELS == 1
-	st sp, [r2, _thread_offset_to_sp]
-	ld sp, [r1, _kernel_offset_to_irq_stack]
-#else
-#error regular irq nesting is not implemented
 #endif
+	clri
+	ld r1, [exc_nest_count]
+	add r0, r1, 1
+	st r0, [exc_nest_count]
+	cmp r1, 0
+
+	bgt.d  rirq_nest
+	mov r0, sp
+
+	mov r1, _kernel
+	ld sp, [r1, _kernel_offset_to_irq_stack]
+rirq_nest:
+	push_s r0
+
+	seti
 	j _isr_demux
 
 
@@ -83,6 +92,20 @@ SECTION_FUNC(TEXT, _rirq_enter)
  */
 
 SECTION_FUNC(TEXT, _rirq_exit)
+	clri
+
+	pop sp
+
+	mov	r1, exc_nest_count
+	ld	r0, [r1]
+	sub	r0, r0, 1
+	cmp	r0, 0
+	bne.d	_rirq_return_from_rirq
+	st	r0, [r1]
+
+#ifdef CONFIG_STACK_SENTINEL
+	bl _check_stack_sentinel
+#endif
 
 #ifdef CONFIG_PREEMPT_ENABLED
 
@@ -94,36 +117,6 @@ SECTION_FUNC(TEXT, _rirq_exit)
 	 * point on until return from interrupt.
 	 */
 
-	clri
-
-#if NUM_REGULAR_IRQ_PRIO_LEVELS > 1
-	/* check if we're a nested interrupt: if so, let the interrupted interrupt
-	 * handle the reschedule */
-
-	lr r3, [_ARC_V2_AUX_IRQ_ACT]
-	ffs r0, r3
-
-	asl r0, 1, r0
-
-	/* the OS on ARCv2 always runs in kernel mode, so assume bit31 [U] in
-	 * AUX_IRQ_ACT is always 0: if the contents of AUX_IRQ_ACT is greater
-	 * than FFS(AUX_IRQ_ACT), it means that another bit is set so an
-	 * interrupt was interrupted.
-	 */
-
-	cmp r0, r3
-	brgt _rirq_return_from_rirq
-#endif
-
-	/*
-	 * Non-preemptible thread ? Do not schedule (see explanation of
-	 * preempt field in kernel_struct.h).
-	 */
-	ldh_s r0, [r2, _thread_offset_to_preempt]
-	mov r3, _NON_PREEMPT_THRESHOLD
-	cmp_s r0, r3
-	bhs.d _rirq_no_reschedule
-
 	/*
 	 * Both (a)reschedule and (b)non-reschedule cases need to load the
 	 * current thread's stack, but don't have to use it until the decision
@@ -133,8 +126,6 @@ SECTION_FUNC(TEXT, _rirq_exit)
 	 * a) needs to load it to save outgoing context.
 	 * b) needs to load it to restore the interrupted context.
 	 */
-
-	ld sp, [r2, _thread_offset_to_sp]
 
 	/* check if the current thread needs to be rescheduled */
 	ld_s r0, [r1, _kernel_offset_to_ready_q_cache]
@@ -160,17 +151,20 @@ _rirq_common_interrupt_swap:
 	/* r2 contains pointer to new thread */
 
 #ifdef CONFIG_ARC_STACK_CHECKING
-	/* Use stack top and base registers from restored context */
-	ld r3, [r2, _thread_offset_to_stack_base]
-	sr r3, [_ARC_V2_KSTACK_BASE]
-	ld r3, [r2, _thread_offset_to_stack_top]
-	sr r3, [_ARC_V2_KSTACK_TOP]
+	_load_stack_check_regs
 #endif
 	/*
 	 * _load_callee_saved_regs expects incoming thread in r2.
 	 * _load_callee_saved_regs restores the stack pointer.
 	 */
 	_load_callee_saved_regs
+
+#if defined(CONFIG_MPU_STACK_GUARD) || defined(CONFIG_USERSPACE)
+	push_s r2
+	mov r0, r2
+	bl configure_mpu_thread
+	pop_s r2
+#endif
 
 	ld_s r3, [r2, _thread_offset_to_relinquish_cause]
 
@@ -184,27 +178,27 @@ _rirq_common_interrupt_swap:
 .balign 4
 _rirq_return_from_coop:
 
-	/* status32 and pc (blink) are already on the stack in the right order */
+	/*
+	 * status32, sec_stat (when CONFIG_ARC_HAS_SECURE is enabled) and pc
+	 * (blink) are already on the stack in the right order
+	 */
+	ld_s r0, [sp, ___isf_t_status32_OFFSET - ___isf_t_pc_OFFSET]
 
 	/* update status32.ie (explanation in firq_exit:_firq_return_from_coop) */
-	ld_s r0, [sp, 4]
+
 	ld_s r3, [r2, _thread_offset_to_intlock_key]
 	st  0, [r2, _thread_offset_to_intlock_key]
 	cmp r3, 0
 	or.ne r0, r0, _ARC_V2_STATUS32_IE
-	st_s r0, [sp, 4]
+
+	st_s r0, [sp, ___isf_t_status32_OFFSET - ___isf_t_pc_OFFSET]
 
 	/* carve fake stack */
+	sub sp, sp, ___isf_t_pc_OFFSET
 
-	/*
-	 * a) status32/pc are already on the stack
-	 * b) a real value will be pushed in r0
-	 */
-	sub sp, sp, (___isf_t_SIZEOF - 12)
-
-	/* push return value on stack */
+	/* update return value on stack */
 	ld_s r0, [r2, _thread_offset_to_return_value]
-	push_s r0
+	st_s r0, [sp, ___isf_t_r0_OFFSET]
 
 	/*
 	 * r13 is part of both the callee and caller-saved register sets because
@@ -218,10 +212,6 @@ _rirq_return_from_coop:
 
 	/* fall through to rtie instruction */
 
-.balign 4
-_rirq_return_from_firq:
-_rirq_return_from_rirq:
-
 	/* rtie will pop the rest from the stack */
 
 	/* fall through to rtie instruction */
@@ -229,6 +219,8 @@ _rirq_return_from_rirq:
 #endif /* CONFIG_PREEMPT_ENABLED */
 
 .balign 4
+_rirq_return_from_firq:
+_rirq_return_from_rirq:
 _rirq_no_reschedule:
 
 	rtie

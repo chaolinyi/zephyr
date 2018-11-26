@@ -6,11 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if 1
-#define SYS_LOG_DOMAIN "echo-client"
-#define NET_SYS_LOG_LEVEL SYS_LOG_LEVEL_DEBUG
-#define NET_LOG_ENABLED 1
-#endif
+#define LOG_MODULE_NAME net_echo_client_tcp
+#define NET_LOG_LEVEL LOG_LEVEL_DBG
 
 #include <zephyr.h>
 #include <errno.h>
@@ -151,7 +148,7 @@ static void send_tcp_data(struct net_app_ctx *ctx,
 
 	data->received_tcp = 0;
 
-	pkt = prepare_send_pkt(ctx, data->proto, data->expecting_tcp);
+	pkt = prepare_send_pkt(ctx, data->proto, &data->expecting_tcp);
 	if (!pkt) {
 		return;
 	}
@@ -231,8 +228,8 @@ static void tcp_received(struct net_app_ctx *ctx,
 		return;
 	}
 
-	NET_DBG("Sent %d bytes, received %u bytes",
-		data->expecting_tcp, net_pkt_appdatalen(pkt));
+	NET_DBG("%s: Sent %d bytes, received %u bytes",
+		data->proto, data->expecting_tcp, net_pkt_appdatalen(pkt));
 
 	if (!compare_tcp_data(pkt, data->expecting_tcp, data->received_tcp)) {
 		NET_DBG("Data mismatch");
@@ -268,13 +265,12 @@ static void tcp_connected(struct net_app_ctx *ctx,
 			k_sem_give(&tcp_ready);
 		}
 	}
-
-	send_tcp_data(ctx, user_data);
 }
 
 static int connect_tcp(struct net_app_ctx *ctx, const char *peer,
 		       void *user_data, u8_t *result_buf,
-		       size_t result_buf_len, u8_t *stack, size_t stack_size)
+		       size_t result_buf_len,
+		       k_thread_stack_t *stack, size_t stack_size)
 {
 	struct data *data = user_data;
 	int ret;
@@ -329,7 +325,7 @@ int start_tcp(void)
 	int ret = 0;
 
 	if (IS_ENABLED(CONFIG_NET_IPV6)) {
-		ret = connect_tcp(&tcp6, CONFIG_NET_APP_PEER_IPV6_ADDR,
+		ret = connect_tcp(&tcp6, CONFIG_NET_CONFIG_PEER_IPV6_ADDR,
 				  &conf.ipv6, tls_result_ipv6,
 				  sizeof(tls_result_ipv6),
 				  net_app_tls_stack_ipv6,
@@ -341,15 +337,23 @@ int start_tcp(void)
 	}
 
 	if (IS_ENABLED(CONFIG_NET_IPV4)) {
-		ret = connect_tcp(&tcp4, CONFIG_NET_APP_PEER_IPV4_ADDR,
+		ret = connect_tcp(&tcp4, CONFIG_NET_CONFIG_PEER_IPV4_ADDR,
 				  &conf.ipv4, tls_result_ipv4,
 				  sizeof(tls_result_ipv4),
 				  net_app_tls_stack_ipv4,
 				  K_THREAD_STACK_SIZEOF(
 					  net_app_tls_stack_ipv4));
 		if (ret < 0) {
-			NET_ERR("Cannot init IPv6 TCP client (%d)", ret);
+			NET_ERR("Cannot init IPv4 TCP client (%d)", ret);
 		}
+	}
+
+	if (IS_ENABLED(CONFIG_NET_IPV6)) {
+		send_tcp_data(&tcp6, &conf.ipv6);
+	}
+
+	if (IS_ENABLED(CONFIG_NET_IPV4)) {
+		send_tcp_data(&tcp4, &conf.ipv4);
 	}
 
 	return ret;

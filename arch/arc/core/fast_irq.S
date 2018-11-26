@@ -21,27 +21,13 @@
 
 GTEXT(_firq_enter)
 GTEXT(_firq_exit)
-GTEXT(_firq_stack_setup)
-GTEXT(_firq_stack_suspend)
-GTEXT(_firq_stack_resume)
 
-#if CONFIG_RGF_NUM_BANKS != 1
-GDATA(_firq_stack)
-GDATA(_saved_firq_stack)
-
-SECTION_VAR(NOINIT, _firq_stack)
-	.space CONFIG_FIRQ_STACK_SIZE
-#else
-GDATA(saved_r0)
-#endif
-
-.macro _firq_return
+GDATA(exc_nest_count)
 #if CONFIG_RGF_NUM_BANKS == 1
-	b _firq_no_reschedule
+GDATA(saved_r0)
 #else
-	rtie
+GDATA(saved_sp)
 #endif
-.endm
 
 /**
  *
@@ -66,7 +52,6 @@ GDATA(saved_r0)
  */
 
 SECTION_FUNC(TEXT, _firq_enter)
-
 /*
  * ATTENTION:
  * If CONFIG_RGF_NUM_BANKS>1, firq uses a 2nd register bank so GPRs do
@@ -74,12 +59,19 @@ SECTION_FUNC(TEXT, _firq_enter)
  * If CONFIG_RGF_NUM_BANKS==1, firq must use the stack to save registers.
  * This has already been done by _isr_wrapper.
  */
-
 #ifdef CONFIG_ARC_STACK_CHECKING
+#ifdef CONFIG_ARC_HAS_SECURE
+	lr r2, [_ARC_V2_SEC_STAT]
+	bclr r2, r2, _ARC_V2_SEC_STAT_SSC_BIT
+	/* sflag r2 */
+	/* sflag instruction is not supported in current ARC GNU */
+	.long 0x00bf302f
+#else
 	/* disable stack checking */
 	lr r2, [_ARC_V2_STATUS32]
 	bclr r2, r2, _ARC_V2_STATUS32_SC_BIT
 	kflag r2
+#endif
 #endif
 
 #if CONFIG_RGF_NUM_BANKS != 1
@@ -95,7 +87,40 @@ SECTION_FUNC(TEXT, _firq_enter)
 #endif
 #endif
 
+	ld r1, [exc_nest_count]
+	add r0, r1, 1
+	st r0, [exc_nest_count]
+	cmp r1, 0
+
+	bgt.d  firq_nest
+	mov r0, sp
+
+	mov r1, _kernel
+	ld sp, [r1, _kernel_offset_to_irq_stack]
+#if CONFIG_RGF_NUM_BANKS != 1
+	b firq_nest_1
+firq_nest:
+	mov r1, ilink
+	lr r0, [_ARC_V2_STATUS32]
+	and r0, r0, ~_ARC_V2_STATUS32_RB(7)
+	kflag r0
+
+	st sp, [saved_sp]
+
+	lr ilink, [_ARC_V2_STATUS32]
+	or ilink, ilink, _ARC_V2_STATUS32_RB(1)
+	kflag ilink
+	mov r0, sp
+	ld sp, [saved_sp]
+	mov ilink, r1
+firq_nest_1:
+#else
+firq_nest:
+#endif
+	push_s r0
 	j @_isr_demux
+
+
 
 /**
  *
@@ -114,35 +139,23 @@ SECTION_FUNC(TEXT, _firq_exit)
 	sr r25, [_ARC_V2_LP_END]
 #endif
 #endif
-
-#ifdef CONFIG_PREEMPT_ENABLED
-	mov_s r1, _kernel
-	ld_s r2, [r1, _kernel_offset_to_current]
-
-#if CONFIG_NUM_IRQ_PRIO_LEVELS > 1
 	/* check if we're a nested interrupt: if so, let the interrupted
 	 * interrupt handle the reschedule */
+	mov	r1, exc_nest_count
+	ld	r0, [r1]
+	sub	r0, r0, 1
+	cmp	r0, 0
+	bne.d	_firq_no_reschedule
+	st	r0, [r1]
 
-	lr r3, [_ARC_V2_AUX_IRQ_ACT]
-
-	/* the OS on ARCv2 always runs in kernel mode, so assume bit31 [U] in
-	 * AUX_IRQ_ACT is always 0: if the contents of AUX_IRQ_ACT is not 1, it
-	 * means that another bit is set so an interrupt was interrupted.
-	 */
-
-	breq r3, 1, _firq_check_for_swap
-
-	_firq_return
+#ifdef CONFIG_STACK_SENTINEL
+	bl _check_stack_sentinel
 #endif
 
-.balign 4
-_firq_check_for_swap:
-	/*
-	 * Non-preemptible thread ? Do not schedule (see explanation of
-	 * preempt field in kernel_struct.h).
-	 */
-	ldh_s r0, [r2, _thread_offset_to_preempt]
-	brhs r0, _NON_PREEMPT_THRESHOLD, _firq_no_reschedule
+#ifdef CONFIG_PREEMPT_ENABLED
+
+	mov_s r1, _kernel
+	ld_s r2, [r1, _kernel_offset_to_current]
 
 	/* Check if the current thread (in r2) is the cached thread */
 	ld_s r0, [r1, _kernel_offset_to_ready_q_cache]
@@ -154,6 +167,8 @@ _firq_check_for_swap:
 
 .balign 4
 _firq_no_reschedule:
+	pop sp
+
 	/*
 	 * Keeping this code block close to those that use it allows using brxx
 	 * instruction instead of a pair of cmp and bxx
@@ -180,7 +195,6 @@ _firq_no_reschedule:
 	sr r0, [_ARC_V2_LP_START]
 	pop_s r0
 	mov lp_count,r0
-	ld r0,[saved_r0]
 #ifdef CONFIG_CODE_DENSITY
 	pop_s r0
 	sr r0, [_ARC_V2_EI_BASE]
@@ -189,6 +203,7 @@ _firq_no_reschedule:
 	pop_s r0
 	sr r0, [_ARC_V2_JLI_BASE]
 #endif
+	ld r0,[saved_r0]
 	add sp,sp,8 /* don't need ilink & status32_po from stack */
 #endif
 	rtie
@@ -197,6 +212,7 @@ _firq_no_reschedule:
 
 .balign 4
 _firq_reschedule:
+	pop sp
 
 #if CONFIG_RGF_NUM_BANKS != 1
 	/*
@@ -235,17 +251,20 @@ _firq_reschedule:
 	st_s r2, [r1, _kernel_offset_to_current]
 
 #ifdef CONFIG_ARC_STACK_CHECKING
-	/* Use stack top and base registers from restored context */
-	ld r3, [r2, _thread_offset_to_stack_base]
-	sr r3, [_ARC_V2_KSTACK_BASE]
-	ld r3, [r2, _thread_offset_to_stack_top]
-	sr r3, [_ARC_V2_KSTACK_TOP]
+	_load_stack_check_regs
 #endif
 	/*
 	 * _load_callee_saved_regs expects incoming thread in r2.
 	 * _load_callee_saved_regs restores the stack pointer.
 	 */
 	_load_callee_saved_regs
+
+#if defined(CONFIG_MPU_STACK_GUARD) || defined(CONFIG_USERSPACE)
+	push_s r2
+	mov r0, r2
+	bl configure_mpu_thread
+	pop_s r2
+#endif
 
 	ld_s r3, [r2, _thread_offset_to_relinquish_cause]
 
@@ -295,84 +314,3 @@ _firq_return_from_firq:
 	rtie
 
 #endif /* CONFIG_PREEMPT_ENABLED */
-
-/**
- *
- * @brief Install the FIRQ stack in register bank 1 if CONFIG_RGF_NUM_BANK!=1
- *
- * @return N/A
- */
-
-SECTION_FUNC(TEXT, _firq_stack_setup)
-
-#if CONFIG_RGF_NUM_BANKS != 1
-	lr r0, [_ARC_V2_STATUS32]
-	and r0, r0, ~_ARC_V2_STATUS32_RB(7)
-	or r0, r0, _ARC_V2_STATUS32_RB(1)
-	kflag r0
-
-	mov sp, _firq_stack
-	add sp, sp, CONFIG_FIRQ_STACK_SIZE
-
-	/*
-	 * We have to reload r0 here, because it is bank1 r0 which contains
-	 * garbage, not bank0 r0 containing the previous value of status32.
-	 */
-	lr r0, [_ARC_V2_STATUS32]
-	and r0, r0, ~_ARC_V2_STATUS32_RB(7)
-	kflag r0
-#endif
-
-	j_s [blink]
-
-/**
- *
- * @brief Save the FIRQ context if CONFIG_RGF_NUM_BANK!=1
- *
- * @return N/A
- */
-
-SECTION_FUNC(TEXT, _firq_stack_suspend)
-
-#if CONFIG_RGF_NUM_BANKS != 1
-	/* Switch to bank 1 */
-	lr r0, [_ARC_V2_STATUS32]
-	and r0, r0, ~_ARC_V2_STATUS32_RB(7)
-	or r0, r0, _ARC_V2_STATUS32_RB(1)
-	kflag r0
-
-	st sp, [_saved_firq_stack]
-
-	/* Switch back to bank 0 */
-	lr r0, [_ARC_V2_STATUS32]
-	and r0, r0, ~_ARC_V2_STATUS32_RB(7)
-	kflag r0
-#endif
-
-	j_s [blink]
-
-/**
- *
- * @brief Restore the FIRQ context if CONFIG_RGF_NUM_BANK!=1
- *
- * @return N/A
- */
-
-SECTION_FUNC(TEXT, _firq_stack_resume)
-
-#if CONFIG_RGF_NUM_BANKS != 1
-	/* Switch to bank 1 */
-	lr r0, [_ARC_V2_STATUS32]
-	and r0, r0, ~_ARC_V2_STATUS32_RB(7)
-	or r0, r0, _ARC_V2_STATUS32_RB(1)
-	kflag r0
-
-	ld sp, [_saved_firq_stack]
-
-	/* Switch back to bank 0 */
-	lr r0, [_ARC_V2_STATUS32]
-	and r0, r0, ~_ARC_V2_STATUS32_RB(7)
-	kflag r0
-#endif
-
-	j_s [blink]

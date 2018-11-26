@@ -8,12 +8,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef __DHCPV4_H
-#define __DHCPV4_H
+#ifndef ZEPHYR_INCLUDE_NET_DHCPV4_H_
+#define ZEPHYR_INCLUDE_NET_DHCPV4_H_
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @brief DHCPv4
  * @defgroup dhcpv4 DHCPv4
+ * @ingroup networking
  * @{
  */
 
@@ -33,7 +38,7 @@ enum net_dhcpv4_state {
 	NET_DHCPV4_RENEWING,
 	NET_DHCPV4_REBINDING,
 	NET_DHCPV4_BOUND,
-};
+} __packed;
 
 /**
  *  @brief Start DHCPv4 client on an iface
@@ -68,4 +73,8 @@ const char *net_dhcpv4_state_name(enum net_dhcpv4_state state);
  * @}
  */
 
-#endif /* __DHCPV4_H */
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* ZEPHYR_INCLUDE_NET_DHCPV4_H_ */

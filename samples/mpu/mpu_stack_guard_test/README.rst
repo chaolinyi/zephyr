@@ -20,48 +20,57 @@ Building and Running
 This project outputs to the console.
 To build the test with the MPU disabled:
 
-.. code-block:: console
-
-   $ cd samples/mpu_stack_guard_test
-   $ make
+.. zephyr-app-commands::
+   :zephyr-app: samples/mpu/mpu_stack_guard_test
+   :board: frdm_k64f
+   :goals: build flash
+   :compact:
 
 To build the test with the MPU enabled and the stack guard feature present:
 
-.. code-block:: console
-
-   $ cd samples/mpu_stack_guard_test
-   $ make CONF_FILE=prj_stack_guard.conf
+.. zephyr-app-commands::
+   :zephyr-app: samples/mpu/mpu_stack_guard_test
+   :board: frdm_k64f
+   :conf: prj_stack_guard.conf
+   :goals: build flash
+   :compact:
 
 Sample Output
 =============
 
-With the MPU disabled:
+With the MPU enabled but the stack guard feature disabled:
 
 .. code-block:: console
 
-   ***** BOOTING ZEPHYR OS v1.7.99 - BUILD: Mar 29 2017 11:07:09 *****
-   MPU STACK GUARD Test
-   Canary Initial Value = 0xf0cacc1a
-   Canary = 0x200003a8     Test not passed.
-   ...
+    ***** Booting Zephyr OS v1.13.0-rc1-14-gd47fada *****
+    STACK_ALIGN 0x8
+    MPU STACK GUARD Test
+    Canary Initial Value = 0xf0cacc1a threads 0x20000ff8
+    Canary = 0x20000128     Test not passed.
+    ***** BUS FAULT *****
+      Instruction bus error
+      NXP MPU error, port 3
+        Mode: Supervisor, Instruction Address: 0x20001030
+        Type: Read, Master: 0, Regions: 0x8800
+    ***** Hardware exception *****
+    Current thread ID = 0x20000ff8
+    Faulting instruction address = 0x20001030
+    Fatal fault in essential thread! Spinning...
 
-With the MPU enabled and the stack guard feature present:
+With the MPU enabled and the stack guard feature enabled:
 
 .. code-block:: console
 
-   ***** BOOTING ZEPHYR OS v1.7.99 - BUILD: Mar 29 2017 11:20:10 *****
-   MPU STACK GUARD Test
-   Canary Initial Value = 0xf0cacc1a
-   [general] [DBG] arm_core_mpu_configure: Region info: 0x200003ac 0x400
-   ***** MPU FAULT *****
-     Executing thread ID (thread): 0x200003ac
-     Faulting instruction address:  0x0
-     Stacking error
-   Fatal fault in thread 0x200003ac! Aborting.
-   ***** HARD FAULT *****
-     Fault escalation (see below)
-   ***** MPU FAULT *****
-     Executing thread ID (thread): 0x200003ac
-     Faulting instruction address:  0x8000466
-     Stacking error
-   Fatal fault in ISR! Spinning...
+    ***** Booting Zephyr OS v1.13.0-rc1-14-gd47fada *****
+    STACK_ALIGN 0x20
+    MPU STACK GUARD Test
+    Canary Initial Value = 0xf0cacc1a threads 0x20001100
+    ***** BUS FAULT *****
+      Stacking error
+      NXP MPU error, port 3
+        Mode: Supervisor, Data Address: 0x200011b0
+        Type: Write, Master: 0, Regions: 0x8400
+    ***** Hardware exception *****
+    Current thread ID = 0x20001100
+    Faulting instruction address = 0x0
+    Fatal fault in thread 0x20001100! Aborting.

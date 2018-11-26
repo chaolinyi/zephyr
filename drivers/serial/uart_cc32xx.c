@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* See www.ti.com/lit/pdf/swru367, section 6, for CC3200 UART info. */
-
 #include <kernel.h>
 #include <arch/cpu.h>
 #include <uart.h>
@@ -19,7 +17,8 @@
 
 struct uart_cc32xx_dev_data_t {
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
-	uart_irq_callback_t cb; /**< Callback function pointer */
+	uart_irq_callback_user_data_t cb; /**< Callback function pointer */
+	void *cb_data; /**< Callback function arg */
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 };
 
@@ -27,6 +26,8 @@ struct uart_cc32xx_dev_data_t {
 	((const struct uart_device_config * const)(dev)->config->config_info)
 #define DEV_DATA(dev) \
 	((struct uart_cc32xx_dev_data_t * const)(dev)->driver_data)
+
+#define PRIME_CHAR '\r'
 
 /* Forward decls: */
 static struct device DEVICE_NAME_GET(uart_cc32xx_0);
@@ -36,7 +37,7 @@ static void uart_cc32xx_isr(void *arg);
 #endif
 
 static const struct uart_device_config uart_cc32xx_dev_cfg_0 = {
-	.base = (void *)TI_CC32XX_UART_4000C000_BASE_ADDRESS,
+	.base = (void *)DT_TI_CC32XX_UART_4000C000_BASE_ADDRESS,
 	.sys_clk_freq = CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC,
 };
 
@@ -62,7 +63,7 @@ static int uart_cc32xx_init(struct device *dev)
 	/* This also calls MAP_UARTEnable() to enable the FIFOs: */
 	MAP_UARTConfigSetExpClk((unsigned long)config->base,
 				MAP_PRCMPeripheralClockGet(PRCM_UARTA0),
-				TI_CC32XX_UART_4000C000_CURRENT_SPEED,
+				DT_TI_CC32XX_UART_4000C000_CURRENT_SPEED,
 				(UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE
 				 | UART_CONFIG_PAR_NONE));
 	MAP_UARTFlowControlSet((unsigned long)config->base,
@@ -71,15 +72,20 @@ static int uart_cc32xx_init(struct device *dev)
 	MAP_UARTFIFODisable((unsigned long)config->base);
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
-	/* Clear any pending UART interrupts: we only care about RX, TX: */
-	MAP_UARTIntClear((unsigned long)config->base,
-		(UART_INT_RX | UART_INT_TX));
+	/* Clear any pending UART RX interrupts: */
+	MAP_UARTIntClear((unsigned long)config->base, UART_INT_RX);
 
-	IRQ_CONNECT(TI_CC32XX_UART_4000C000_IRQ_0,
-		    TI_CC32XX_UART_4000C000_IRQ_0_PRIORITY,
+	IRQ_CONNECT(DT_TI_CC32XX_UART_4000C000_IRQ_0,
+		    DT_TI_CC32XX_UART_4000C000_IRQ_0_PRIORITY,
 		    uart_cc32xx_isr, DEVICE_GET(uart_cc32xx_0),
 		    0);
-	irq_enable(TI_CC32XX_UART_4000C000_IRQ_0);
+	irq_enable(DT_TI_CC32XX_UART_4000C000_IRQ_0);
+
+	/* Fill the tx fifo, so Zephyr console & shell subsystems get "primed"
+	 * with first tx fifo empty interrupt when they first call
+	 * uart_irq_tx_enable().
+	 */
+	MAP_UARTCharPutNonBlocking((unsigned long)config->base, PRIME_CHAR);
 #endif
 	return 0;
 }
@@ -113,7 +119,7 @@ static int uart_cc32xx_err_check(struct device *dev)
 
 	cc32xx_errs = MAP_UARTRxErrorGet((unsigned long)config->base);
 
-	/* Map cc3200 SDK uart.h defines to zephyr uart.h defines */
+	/* Map cc32xx SDK uart.h defines to zephyr uart.h defines */
 	z_err = ((cc32xx_errs & UART_RXERROR_OVERRUN) ?
 		  UART_ERROR_OVERRUN : 0) |
 		((cc32xx_errs & UART_RXERROR_BREAK) ? UART_ERROR_BREAK : 0) |
@@ -245,11 +251,13 @@ static int uart_cc32xx_irq_update(struct device *dev)
 }
 
 static void uart_cc32xx_irq_callback_set(struct device *dev,
-					 uart_irq_callback_t cb)
+					 uart_irq_callback_user_data_t cb,
+					 void *cb_data)
 {
 	struct uart_cc32xx_dev_data_t * const dev_data = DEV_DATA(dev);
 
 	dev_data->cb = cb;
+	dev_data->cb_data = cb_data;
 }
 
 /**
@@ -274,13 +282,15 @@ static void uart_cc32xx_isr(void *arg)
 						    1);
 
 	if (dev_data->cb) {
-		dev_data->cb(dev);
+		dev_data->cb(dev_data->cb_data);
 	}
 	/*
-	 * Clear interrupts only after cb called, as Zephyr UART clients expect
-	 * to check interrupt status during the callback.
+	 * RX/TX interrupt should have been implicitly cleared by Zephyr UART
+	 * clients calling uart_fifo_read() or uart_fifo_write().
+	 * Still, clear any error interrupts here, as they're not yet handled.
 	 */
-	MAP_UARTIntClear((unsigned long)config->base, intStatus);
+	MAP_UARTIntClear((unsigned long)config->base,
+			 intStatus & ~(UART_INT_RX | UART_INT_TX));
 }
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 
@@ -306,7 +316,7 @@ static const struct uart_driver_api uart_cc32xx_driver_api = {
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 };
 
-DEVICE_AND_API_INIT(uart_cc32xx_0, CONFIG_UART_CC32XX_NAME,
+DEVICE_AND_API_INIT(uart_cc32xx_0, DT_UART_CC32XX_NAME,
 		    uart_cc32xx_init, &uart_cc32xx_dev_data_0,
 		    &uart_cc32xx_dev_cfg_0,
 		    PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,

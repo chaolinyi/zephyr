@@ -12,8 +12,12 @@
 #include <sensor.h>
 #include <misc/byteorder.h>
 #include <kernel.h>
+#include <logging/log.h>
 
 #include "bmg160.h"
+
+#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
+LOG_MODULE_REGISTER(BMG160);
 
 struct bmg160_device_data bmg160_data;
 
@@ -21,13 +25,11 @@ static inline int bmg160_bus_config(struct device *dev)
 {
 	const struct bmg160_device_config *dev_cfg = dev->config->config_info;
 	struct bmg160_device_data *bmg160 = dev->driver_data;
-	union dev_config i2c_cfg;
+	u32_t i2c_cfg;
 
-	i2c_cfg.raw = 0;
-	i2c_cfg.bits.is_master_device = 1;
-	i2c_cfg.bits.speed = dev_cfg->i2c_speed;
+	i2c_cfg = I2C_MODE_MASTER | I2C_SPEED_SET(dev_cfg->i2c_speed);
 
-	return i2c_configure(bmg160->i2c, i2c_cfg.raw);
+	return i2c_configure(bmg160->i2c, i2c_cfg);
 }
 
 int bmg160_read(struct device *dev, u8_t reg_addr, u8_t *data,
@@ -215,7 +217,7 @@ static void bmg160_to_fixed_point(struct bmg160_device_data *bmg160,
 				  enum sensor_channel chan, s16_t raw,
 				  struct sensor_value *val)
 {
-	if (chan == SENSOR_CHAN_TEMP) {
+	if (chan == SENSOR_CHAN_DIE_TEMP) {
 		val->val1 = 23 + (raw / 2);
 		val->val2 = (raw % 2) * 500000;
 	} else {
@@ -250,7 +252,7 @@ static int bmg160_channel_get(struct device *dev, enum sensor_channel chan,
 
 		return 0;
 
-	case SENSOR_CHAN_TEMP:
+	case SENSOR_CHAN_DIE_TEMP:
 		bmg160_to_fixed_point(bmg160, chan, bmg160->raw_temp, val);
 		return 0;
 
@@ -277,20 +279,19 @@ int bmg160_init(struct device *dev)
 
 	bmg160->i2c = device_get_binding((char *)cfg->i2c_port);
 	if (!bmg160->i2c) {
-		SYS_LOG_DBG("I2C master controller not found!");
+		LOG_DBG("I2C master controller not found!");
 		return -EINVAL;
 	}
 
-	k_sem_init(&bmg160->sem, 0, UINT_MAX);
-	k_sem_give(&bmg160->sem);
+	k_sem_init(&bmg160->sem, 1, UINT_MAX);
 
 	if (bmg160_read_byte(dev, BMG160_REG_CHIPID, &chip_id) < 0) {
-		SYS_LOG_DBG("Failed to read chip id.");
+		LOG_DBG("Failed to read chip id.");
 		return -EIO;
 	}
 
 	if (chip_id != BMG160_CHIP_ID) {
-		SYS_LOG_DBG("Unsupported chip detected (0x%x)!", chip_id);
+		LOG_DBG("Unsupported chip detected (0x%x)!", chip_id);
 		return -ENODEV;
 	}
 
@@ -301,7 +302,7 @@ int bmg160_init(struct device *dev)
 
 	if (bmg160_write_byte(dev, BMG160_REG_RANGE,
 			      BMG160_DEFAULT_RANGE) < 0) {
-		SYS_LOG_DBG("Failed to set range.");
+		LOG_DBG("Failed to set range.");
 		return -EIO;
 	}
 
@@ -310,21 +311,19 @@ int bmg160_init(struct device *dev)
 	bmg160->scale = BMG160_RANGE_TO_SCALE(range_dps);
 
 	if (bmg160_write_byte(dev, BMG160_REG_BW, BMG160_DEFAULT_ODR) < 0) {
-		SYS_LOG_DBG("Failed to set sampling frequency.");
+		LOG_DBG("Failed to set sampling frequency.");
 		return -EIO;
 	}
 
 	/* disable interrupts */
 	if (bmg160_write_byte(dev, BMG160_REG_INT_EN0, 0) < 0) {
-		SYS_LOG_DBG("Failed to disable all interrupts.");
+		LOG_DBG("Failed to disable all interrupts.");
 		return -EIO;
 	}
 
 #ifdef CONFIG_BMG160_TRIGGER
 	bmg160_trigger_init(dev);
 #endif
-
-	dev->driver_api = &bmg160_api;
 
 	return 0;
 }
@@ -339,5 +338,6 @@ const struct bmg160_device_config bmg160_config = {
 #endif
 };
 
-DEVICE_INIT(bmg160, CONFIG_BMG160_DRV_NAME, bmg160_init, &bmg160_data,
-	    &bmg160_config, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY);
+DEVICE_AND_API_INIT(bmg160, CONFIG_BMG160_DRV_NAME, bmg160_init, &bmg160_data,
+		    &bmg160_config, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
+		    &bmg160_api);

@@ -1,7 +1,7 @@
 GATT PICS
 #########
 
-PTS version: 6.4
+PTS version: 7.2.0
 
 \* - different than PTS defaults
 
@@ -20,8 +20,23 @@ Parameter Name	Selected	Description
 ==============	===========	============================================
 TSPC_GATT_1_1	True		Generic Attribute Profile Client (C.1)
 TSPC_GATT_1_2	True		Generic Attribute Profile Server (C.2)
-TSPC_GATT_1A_1	False (*)	Complete GATT client (C.3)
-TSPC_GATT_1A_2	False (*)	Complete GATT server (C.4)
+==============	===========	============================================
+
+
+GATT role configuration
+***********************
+
+==============	===========	============================================
+Parameter Name	Selected	Description
+==============	===========	============================================
+TSPC_GATT_1a_1	True		GATT Client over LE (C.1)
+TSPC_GATT_1a_2	False		GATT Client over BR/EDR (C.2)
+TSPC_GATT_1a_3	True		GATT Server over LE (C.3)
+TSPC_GATT_1a_4	False		GATT Server over BR/EDR (C.4)
+TSPC_GATT_1a_5	False		Complete GATT Client layer over LE (C.5)
+TSPC_GATT_1a_6	False		Complete GATT Client layer over BR/EDR (C.6)
+TSPC_GATT_1a_7	False		Complete GATT Server layer over LE (C.7)
+TSPC_GATT_1a_8	False		Complete GATT Server layer over BR/EDR (C.8)
 ==============	===========	============================================
 
 
@@ -73,6 +88,7 @@ TSPC_GATT_3_21	True		Client: Write Characteristic Descriptors (C.1)
 TSPC_GATT_3_22	True		Client: Write Long Characteristic Descriptors
 				(C.1)
 TSPC_GATT_3_23	True		Client: Service Changed Characteristic (M)
+TSPC_GATT_3_24	False (*)	Client: Configured Broadcast (C.3)
 ==============	===========	============================================
 
 
@@ -155,14 +171,16 @@ TSPC_GATT_4_15	True		Server: Write Long Characteristic Values (C.4)
 TSPC_GATT_4_16	True		Server: Characteristic Value Reliable
 				Writes (C.4)
 TSPC_GATT_4_17	True		Server: Notifications (C.4)
-TSPC_GATT_4_18	False (*)	Server: Indications (C.1)
+TSPC_GATT_4_18	True		Server: Indications (C.1)
 TSPC_GATT_4_19	True		Server: Read Characteristic Descriptors (C.4)
 TSPC_GATT_4_20	True		Server: Read long Characteristic
 				Descriptors (C.4)
 TSPC_GATT_4_21	True		Server: Write Characteristic Descriptors (C.4)
 TSPC_GATT_4_22	True		Server: Write Long Characteristic
 				Descriptors (C.4)
-TSPC_GATT_4_23	False (*)	Server: Service Changed Characteristic (C.1)
+TSPC_GATT_4_23	True		Server: Service Changed Characteristic (C.1)
+TSPC_GATT_4_24	False (*)	Server: Configured Broadcast (C.5)
+TSPC_GATT_4_25	False (*)	Server: Execute Write Request with empty queue (C.7)
 ==============	===========	============================================
 
 
@@ -246,68 +264,14 @@ TSPC_GATT_7_7	True		LE Authorization Procedure (C.2)
 ==============	===========	============================================
 
 
-Attribute Protocol Client Messages
-**********************************
-
-==============	===========	============================================
-Parameter Name	Selected	Description
-==============	===========	============================================
-TSPC_ATT_3_1	False (*)	Attribute Error Response (M)
-TSPC_ATT_3_2	False (*)	Exchange MTU Request (O)
-TSPC_ATT_3_4	False (*)	Find Information Request (O)
-TSPC_ATT_3_6	False (*)	Find by Type Value Request (O)
-TSPC_ATT_3_8	False (*)	Read by Type Request (O)
-TSPC_ATT_3_10	False (*)	Read Request (O)
-TSPC_ATT_3_12	False (*)	Read Blob Request (O)
-TSPC_ATT_3_14	False (*)	Read Multiple Request (O)
-TSPC_ATT_3_16	False (*)	Read by Group Type Request (O)
-TSPC_ATT_3_17	False (*)	Read by Group Type Response (C.6)
-TSPC_ATT_3_18	False (*)	Write Request (O)
-TSPC_ATT_3_20	False (*)	Write Command (O)
-TSPC_ATT_3_21	False (*)	Signed Write Command (O)
-TSPC_ATT_3_22	False (*)	Prepare Write Request (O)
-TSPC_ATT_3_24	False (*)	Execute Write Request (C.8)
-TSPC_ATT_3_26	False (*)	Handle Value Notification (M)
-TSPC_ATT_3_28	False (*)	Handle Value Confirmation (M)
-==============	===========	============================================
-
-
-Attribute Protocol Server Messages
-**********************************
-
-==============	===========	============================================
-Parameter Name	Selected	Description
-==============	===========	============================================
-TSPC_ATT_4_1	True		Attribute Error Response (M)
-TSPC_ATT_4_2	True		Exchange MTU Request (M)
-TSPC_ATT_4_3	True		Exchange MTU Response (M)
-TSPC_ATT_4_5	True		Find Information Response (M)
-TSPC_ATT_4_7	True		Find by Type Value Response (M)
-TSPC_ATT_4_8	True		Read by Type Request (M)
-TSPC_ATT_4_9	False (*)	Read by Type Response (M)
-TSPC_ATT_4_11	True		Read Response (M)
-TSPC_ATT_4_13	False (*)	Read Blob Response (C.1)
-TSPC_ATT_4_15	False (*)	Read Multiple Response (C.2)
-TSPC_ATT_4_17	True		Read by Group Type Response (M)
-TSPC_ATT_4_19	False (*)	Write Response (C.3)
-TSPC_ATT_4_20	False (*)	Write Command (O)
-TSPC_ATT_4_21	False (*)	Signed Write Command (O)
-TSPC_ATT_4_23	False (*)	Prepare Write Response (C.4)
-TSPC_ATT_4_25	False (*)	Execute Write Response (C.4)
-TSPC_ATT_4_26	False (*)	Handle Value Notification (O)
-TSPC_ATT_4_27	False (*)	Handle Value Indication (O)
-==============	===========	============================================
-
-
 Attribute Protocol Transport
 ****************************
 
 ==============	===========	============================================
 Parameter Name	Selected	Description
 ==============	===========	============================================
-TSPC_ATT_5_2	True		LE Security Mode 1 (C.2)
-TSPC_ATT_5_4	True		LE Authentication Procedure (C.2)
-TSPC_ATT_5_7	True		LE Authorization Procedure (C.2)
+TSPC_GATT_8_1	False (*)	Support for Multiple ATT bearers from same
+				device (C.1)
 ==============	===========	============================================
 
 

@@ -13,11 +13,14 @@
 #ifndef __ZTEST_TEST_H__
 #define __ZTEST_TEST_H__
 
+#include <app_memory/app_memdomain.h>
+
 struct unit_test {
 	const char *name;
 	void (*test)(void);
 	void (*setup)(void);
 	void (*teardown)(void);
+	u32_t thread_options;
 };
 
 void _ztest_run_test_suite(const char *name, struct unit_test *suite);
@@ -51,6 +54,12 @@ void ztest_test_fail(void);
 void ztest_test_pass(void);
 
 /**
+ * @brief Skip the current test.
+ *
+ */
+void ztest_test_skip(void);
+
+/**
  * @brief Do nothing, successfully.
  *
  * Unit test / setup function / teardown function that does
@@ -73,9 +82,25 @@ static inline void unit_test_noop(void)
  */
 
 #define ztest_unit_test_setup_teardown(fn, setup, teardown) { \
-		STRINGIFY(fn), fn, setup, teardown \
+		STRINGIFY(fn), fn, setup, teardown, 0 \
 }
 
+/**
+ * @brief Define a user mode test with setup and teardown functions
+ *
+ * This should be called as an argument to ztest_test_suite. The test will
+ * be run in the following order: @a setup, @a fn, @a teardown. ALL
+ * test functions will be run in user mode, and only if CONFIG_USERSPACE
+ * is enabled, otherwise this is the same as ztest_unit_test_setup_teardown().
+ *
+ * @param fn Main test function
+ * @param setup Setup function
+ * @param teardown Teardown function
+ */
+
+#define ztest_user_unit_test_setup_teardown(fn, setup, teardown) { \
+		STRINGIFY(fn), fn, setup, teardown, K_USER \
+}
 
 /**
  * @brief Define a test function
@@ -87,6 +112,19 @@ static inline void unit_test_noop(void)
 
 #define ztest_unit_test(fn) \
 	ztest_unit_test_setup_teardown(fn, unit_test_noop, unit_test_noop)
+
+/**
+ * @brief Define a test function that should run as a user thread
+ *
+ * This should be called as an argument to ztest_test_suite.
+ * If CONFIG_USERSPACE is not enabled, this is functionally identical to
+ * ztest_unit_test().
+ *
+ * @param fn Test function
+ */
+
+#define ztest_user_unit_test(fn) \
+	ztest_user_unit_test_setup_teardown(fn, unit_test_noop, unit_test_noop)
 
 /**
  * @brief Define a test suite
@@ -103,8 +141,17 @@ static inline void unit_test_noop(void)
  *
  * @param name Name of the testing suite
  */
+
+/* definitions for use with testing application shared memory   */
+#ifdef CONFIG_APP_SHARED_MEM
+#define APPDMEMP0 _app_dmem(part0)
+#define APPBMEMP0 _app_bmem(part0)
+#else
+#define APPDMEMP0
+#define APPBMEMP0
+#endif
 #define ztest_test_suite(name, ...) \
-	struct unit_test _##name[] = { \
+	     APPDMEMP0  static struct unit_test _##name[] = { \
 		__VA_ARGS__, { 0 } \
 	}
 /**

@@ -2,13 +2,11 @@
   ******************************************************************************
   * @file    stm32f7xx_ll_utils.c
   * @author  MCD Application Team
-  * @version V1.2.0
-  * @date    30-December-2016
   * @brief   UTILS LL module driver.
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; COPYRIGHT(c) 2016 STMicroelectronics</center></h2>
+  * <h2><center>&copy; COPYRIGHT(c) 2017 STMicroelectronics</center></h2>
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -626,7 +624,7 @@ static uint32_t UTILS_GetPLLOutputFrequency(uint32_t PLL_InputFrequency, LL_UTIL
   assert_param(IS_LL_UTILS_PLLM_VALUE(UTILS_PLLInitStruct->PLLM));
   assert_param(IS_LL_UTILS_PLLN_VALUE(UTILS_PLLInitStruct->PLLN));
   assert_param(IS_LL_UTILS_PLLP_VALUE(UTILS_PLLInitStruct->PLLP));
-  
+
   /* Check different PLL parameters according to RM                          */
   /*  - PLLM: ensure that the VCO input frequency ranges from 0.95 to 2.1 MHz.   */
   pllfreq = PLL_InputFrequency / (UTILS_PLLInitStruct->PLLM & (RCC_PLLCFGR_PLLM >> RCC_PLLCFGR_PLLM_Pos));
@@ -635,7 +633,7 @@ static uint32_t UTILS_GetPLLOutputFrequency(uint32_t PLL_InputFrequency, LL_UTIL
   /*  - PLLN: ensure that the VCO output frequency is between 100 and 432 MHz.*/
   pllfreq = pllfreq * (UTILS_PLLInitStruct->PLLN & (RCC_PLLCFGR_PLLN >> RCC_PLLCFGR_PLLN_Pos));
   assert_param(IS_LL_UTILS_PLLVCO_OUTPUT(pllfreq));
-  
+
   /*  - PLLP: ensure that max frequency at 216000000 Hz is reached     */
   pllfreq = pllfreq / (((UTILS_PLLInitStruct->PLLP >> RCC_PLLCFGR_PLLP_Pos) + 1) * 2);
   assert_param(IS_LL_UTILS_PLL_FREQUENCY(pllfreq));
@@ -725,7 +723,7 @@ static ErrorStatus UTILS_EnablePLLAndSwitchSystem(uint32_t SYSCLK_Frequency, LL_
     LL_RCC_SetAPB1Prescaler(UTILS_ClkInitStruct->APB1CLKDivider);
     LL_RCC_SetAPB2Prescaler(UTILS_ClkInitStruct->APB2CLKDivider);
   }
-    
+
   /* Decreasing the number of wait states because of lower CPU frequency */
   if(SystemCoreClock > hclk_frequency)
   {

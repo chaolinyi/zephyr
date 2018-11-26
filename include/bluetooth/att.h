@@ -7,8 +7,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef __BT_ATT_H
-#define __BT_ATT_H
+#ifndef ZEPHYR_INCLUDE_BLUETOOTH_ATT_H_
+#define ZEPHYR_INCLUDE_BLUETOOTH_ATT_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,13 +53,13 @@ struct bt_att_req {
 	bt_att_destroy_t destroy;
 	struct net_buf_simple_state state;
 	struct net_buf *buf;
-#if defined(CONFIG_BLUETOOTH_SMP)
+#if defined(CONFIG_BT_SMP)
 	bool retrying;
-#endif /* CONFIG_BLUETOOTH_SMP */
+#endif /* CONFIG_BT_SMP */
 };
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __BT_ATT_H */
+#endif /* ZEPHYR_INCLUDE_BLUETOOTH_ATT_H_ */

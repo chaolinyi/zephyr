@@ -1,7 +1,0 @@
-identifier: panther
-name: Panther Board
-type: mcu
-arch: x86
-toolchain:
-  - zephyr
-  - issm

@@ -11,32 +11,18 @@
  * Reset handler that prepares the system for running C code.
  */
 
-// #include <board.h>
 #include <toolchain.h>
 #include <linker/sections.h>
 #include <arch/cpu.h>
 
 GDATA(_interrupt_stack)
-GDATA(_firq_stack)
 GDATA(_main_stack)
 
 /* use one of the available interrupt stacks during init */
 
-/* FIRQ only ? */
-#if CONFIG_NUM_IRQ_PRIO_LEVELS == 1
 
-	/* FIRQ, but uses _interrupt_stack ? */
-	#if CONFIG_RGF_NUM_BANKS == 1
-		#define INIT_STACK _interrupt_stack
-		#define INIT_STACK_SIZE CONFIG_ISR_STACK_SIZE
-	#else
-		#define INIT_STACK _firq_stack
-		#define INIT_STACK_SIZE CONFIG_FIRQ_STACK_SIZE
-	#endif
-#else
-	#define INIT_STACK _interrupt_stack
-	#define INIT_STACK_SIZE CONFIG_ISR_STACK_SIZE
-#endif
+#define INIT_STACK _interrupt_stack
+#define INIT_STACK_SIZE CONFIG_ISR_STACK_SIZE
 
 GTEXT(__reset)
 GTEXT(__start)
@@ -58,9 +44,24 @@ GTEXT(__start)
 SECTION_FUNC(TEXT,__reset)
 SECTION_FUNC(TEXT,__start)
 
-	/* lock interrupts: will get unlocked when switch to main task */
-	clri
+	/* lock interrupts: will get unlocked when switch to main task
+	 * also make sure the processor in the correct status
+	 */
+	mov r0, 0
+	kflag r0
 
+	/* interrupt related init */
+	sr r0, [_ARC_V2_AUX_IRQ_ACT]
+	sr r0, [_ARC_V2_AUX_IRQ_CTRL]
+	sr r0, [_ARC_V2_AUX_IRQ_HINT]
+
+	/* \todo: MPU init, gp for small data? */
+
+#if CONFIG_USERSPACE
+	lr r0, [_ARC_V2_STATUS32]
+	bset r0, r0, _ARC_V2_STATUS32_US_BIT
+	kflag r0
+#endif
 	mov r1, 1
 
 invalidate_and_disable_icache:
@@ -105,13 +106,6 @@ done_cache_invalidate:
 	mov_s r1, 0xaa
 	mov_s r2, CONFIG_ISR_STACK_SIZE
 	jl memset
-
-#if CONFIG_RGF_NUM_BANKS != 1
-	mov_s r0, _firq_stack
-	mov_s r1, 0xaa
-	mov_s r2, CONFIG_FIRQ_STACK_SIZE
-	jl memset
-#endif
 
 #endif /* CONFIG_INIT_STACKS */
 

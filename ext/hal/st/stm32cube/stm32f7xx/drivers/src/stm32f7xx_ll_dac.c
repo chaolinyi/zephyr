@@ -2,13 +2,11 @@
   ******************************************************************************
   * @file    stm32f7xx_ll_dac.c
   * @author  MCD Application Team
-  * @version V1.2.0
-  * @date    30-December-2016
   * @brief   DAC LL module driver
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; COPYRIGHT(c) 2016 STMicroelectronics</center></h2>
+  * <h2><center>&copy; COPYRIGHT(c) 2017 STMicroelectronics</center></h2>
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -148,10 +146,10 @@ ErrorStatus LL_DAC_DeInit(DAC_TypeDef *DACx)
 {
   /* Check the parameters */
   assert_param(IS_DAC_ALL_INSTANCE(DACx));
-  
+
   /* Force reset of DAC1 clock */
   LL_APB1_GRP1_ForceReset(LL_APB1_GRP1_PERIPH_DAC1);
-  
+
   /* Release reset of DAC1 clock */
   LL_APB1_GRP1_ReleaseReset(LL_APB1_GRP1_PERIPH_DAC1);
   return SUCCESS;
@@ -174,7 +172,7 @@ ErrorStatus LL_DAC_DeInit(DAC_TypeDef *DACx)
 ErrorStatus LL_DAC_Init(DAC_TypeDef *DACx, uint32_t DAC_Channel, LL_DAC_InitTypeDef *DAC_InitStruct)
 {
   ErrorStatus status = SUCCESS;
-  
+
   /* Check the parameters */
   assert_param(IS_DAC_ALL_INSTANCE(DACx));
   assert_param(IS_LL_DAC_CHANNEL(DACx, DAC_Channel));
@@ -185,7 +183,7 @@ ErrorStatus LL_DAC_Init(DAC_TypeDef *DACx, uint32_t DAC_Channel, LL_DAC_InitType
   {
     assert_param(IS_LL_DAC_WAVE_AUTO_GENER_CONFIG(DAC_InitStruct->WaveAutoGenerationConfig));
   }
-  
+
   /* Note: Hardware constraint (refer to description of this function)        */
   /*       DAC instance must be disabled.                                     */
   if(LL_DAC_IsEnabled(DACx, DAC_Channel) == 0U)

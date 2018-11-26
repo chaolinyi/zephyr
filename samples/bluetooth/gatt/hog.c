@@ -55,7 +55,7 @@ static struct hids_report input = {
 	.type = HIDS_INPUT,
 };
 
-static struct bt_gatt_ccc_cfg input_ccc_cfg[CONFIG_BLUETOOTH_MAX_PAIRED] = {};
+static struct bt_gatt_ccc_cfg input_ccc_cfg[BT_GATT_CCC_MAX] = {};
 static u8_t simulate_input;
 static u8_t ctrl_point;
 static u8_t report_map[] = {
@@ -143,23 +143,21 @@ static ssize_t write_ctrl_point(struct bt_conn *conn,
 /* HID Service Declaration */
 static struct bt_gatt_attr attrs[] = {
 	BT_GATT_PRIMARY_SERVICE(BT_UUID_HIDS),
-	BT_GATT_CHARACTERISTIC(BT_UUID_HIDS_INFO, BT_GATT_CHRC_READ),
-	BT_GATT_DESCRIPTOR(BT_UUID_HIDS_INFO, BT_GATT_PERM_READ,
-			   read_info, NULL, &info),
-	BT_GATT_CHARACTERISTIC(BT_UUID_HIDS_REPORT_MAP, BT_GATT_CHRC_READ),
-	BT_GATT_DESCRIPTOR(BT_UUID_HIDS_REPORT_MAP, BT_GATT_PERM_READ,
-			   read_report_map, NULL, NULL),
+	BT_GATT_CHARACTERISTIC(BT_UUID_HIDS_INFO, BT_GATT_CHRC_READ,
+			       BT_GATT_PERM_READ, read_info, NULL, &info),
+	BT_GATT_CHARACTERISTIC(BT_UUID_HIDS_REPORT_MAP, BT_GATT_CHRC_READ,
+			       BT_GATT_PERM_READ, read_report_map, NULL, NULL),
 	BT_GATT_CHARACTERISTIC(BT_UUID_HIDS_REPORT,
-			       BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY),
-	BT_GATT_DESCRIPTOR(BT_UUID_HIDS_REPORT, BT_GATT_PERM_READ_AUTHEN,
-			   read_input_report, NULL, NULL),
+			       BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+			       BT_GATT_PERM_READ_AUTHEN,
+			       read_input_report, NULL, NULL),
 	BT_GATT_CCC(input_ccc_cfg, input_ccc_changed),
 	BT_GATT_DESCRIPTOR(BT_UUID_HIDS_REPORT_REF, BT_GATT_PERM_READ,
 			   read_report, NULL, &input),
 	BT_GATT_CHARACTERISTIC(BT_UUID_HIDS_CTRL_POINT,
-			       BT_GATT_CHRC_WRITE_WITHOUT_RESP),
-	BT_GATT_DESCRIPTOR(BT_UUID_HIDS_CTRL_POINT, BT_GATT_PERM_WRITE,
-			   NULL, write_ctrl_point, &ctrl_point),
+			       BT_GATT_CHRC_WRITE_WITHOUT_RESP,
+			       BT_GATT_PERM_WRITE,
+			       NULL, write_ctrl_point, &ctrl_point),
 };
 
 static struct bt_gatt_service hog_svc = BT_GATT_SERVICE(attrs);
